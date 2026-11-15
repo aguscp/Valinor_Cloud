@@ -49,15 +49,50 @@ const SALAS_DE_PRUEBA = [
   { nombre: "Sala 3", capacidad: 20 },
 ];
 
-const HORARIOS_DE_PRUEBA = [
-  { tipo: "Pilates Reformer", horaInicio: "09:00", sala: 0, profesional: 0, reservasPorOcurrencia: [15, 6] },
-  { tipo: "Yoga", horaInicio: "10:00", sala: 1, profesional: 1, reservasPorOcurrencia: [8, 10] },
-  { tipo: "Pilates Mat", horaInicio: "11:00", sala: 2, profesional: 2, reservasPorOcurrencia: [5, 9] },
-  { tipo: "Yoga", horaInicio: "14:00", sala: 1, profesional: 1, diaSemana: 2, reservasPorOcurrencia: [6, 8] },
-  { tipo: "Pilates Reformer", horaInicio: "14:00", sala: 0, profesional: 0, diaSemana: 3, reservasPorOcurrencia: [5, 7] },
-  { tipo: "Yoga", horaInicio: "14:00", sala: 1, profesional: 1, diaSemana: 4, reservasPorOcurrencia: [9, 6] },
-  { tipo: "Pilates Mat", horaInicio: "14:00", sala: 2, profesional: 2, diaSemana: 5, reservasPorOcurrencia: [7, 10] },
+const CLASES_POR_DIA = [
+  {
+    tipo: "Pilates Reformer",
+    horaInicio: "09:00",
+    sala: 0,
+    profesional: 0,
+    reservasPorSemana: [5, 6],
+  },
+  { tipo: "Yoga", horaInicio: "13:00", sala: 1, profesional: 1, reservasPorSemana: [6, 5] },
+  { tipo: "Pilates Mat", horaInicio: "17:00", sala: 2, profesional: 2, reservasPorSemana: [5, 6] },
 ];
+const SEMANAS_DE_PRUEBA = 8;
+
+const HORARIOS_DE_PRUEBA = Array.from({ length: 7 }, (_, diaSemana) =>
+  CLASES_POR_DIA.map(({ reservasPorSemana, ...clase }) => ({
+    ...clase,
+    diaSemana,
+    repetirSemanas: SEMANAS_DE_PRUEBA,
+    reservasPorOcurrencia: Array.from(
+      { length: SEMANAS_DE_PRUEBA },
+      (_, semana) => reservasPorSemana[semana % reservasPorSemana.length]
+    ),
+  }))
+).flat();
+
+const validarHorariosDePrueba = (horarios) => {
+  const cantidadPorDia = Array(7).fill(0);
+  for (const horario of horarios) {
+    if (!Number.isInteger(horario.diaSemana) || horario.diaSemana < 0 || horario.diaSemana > 6) {
+      throw new Error(`El horario ${horario.tipo} tiene un día de semana inválido.`);
+    }
+    cantidadPorDia[horario.diaSemana] += 1;
+    if (horario.repetirSemanas !== SEMANAS_DE_PRUEBA) {
+      throw new Error(`El horario ${horario.tipo} debe repetirse durante ${SEMANAS_DE_PRUEBA} semanas.`);
+    }
+    if (horario.reservasPorOcurrencia.length !== SEMANAS_DE_PRUEBA) {
+      throw new Error(`El horario ${horario.tipo} no tiene reservas de prueba para las 8 semanas.`);
+    }
+  }
+  const diaIncompleto = cantidadPorDia.findIndex((cantidad) => cantidad !== 3);
+  if (diaIncompleto !== -1) {
+    throw new Error(`El día ${diaIncompleto} debe tener exactamente 3 clases de prueba.`);
+  }
+};
 
 const horaActualEnArgentina = () =>
   Object.fromEntries(
@@ -80,22 +115,46 @@ const sumarDias = (fecha, dias) => {
   return resultado.toISOString().slice(0, 10);
 };
 
-const fechaDeInicio = (horaInicio, ahora) => {
-  const hoy = `${ahora.year}-${ahora.month}-${ahora.day}`;
-  const horaActual = `${ahora.hour}:${ahora.minute}`;
-  return horaInicio > horaActual ? hoy : sumarDias(hoy, 1);
-};
-
-const fechaDelProximoDia = (diaSemana, horaInicio, ahora) => {
+const fechaDeInicioParaDia = (diaSemana, ahora) => {
   const hoy = `${ahora.year}-${ahora.month}-${ahora.day}`;
   const diaActual = new Date(`${hoy}T12:00:00Z`).getUTCDay();
-  let diasHasta = (diaSemana - diaActual + 7) % 7;
-  const horaActual = `${ahora.hour}:${ahora.minute}`;
-  if (diasHasta === 0 && horaInicio <= horaActual) diasHasta = 7;
+  const diasHasta = (diaSemana - diaActual + 7) % 7;
   return sumarDias(hoy, diasHasta);
 };
 
+const horaFin = (horaInicio, duracionMinutos) => {
+  const [horas, minutos] = horaInicio.split(":").map(Number);
+  const totalMinutos = horas * 60 + minutos + duracionMinutos;
+  return `${String(Math.floor(totalMinutos / 60)).padStart(2, "0")}:${String(totalMinutos % 60).padStart(2, "0")}`;
+};
+
+const asegurarClasesDeHoy = async (horarios, hoy, duracionMinutos) => {
+  for (const horario of horarios.filter(({ comienzaDesde }) => comienzaDesde === hoy)) {
+    const sala = await Sala.findById(horario.sala);
+    if (!sala) throw new Error(`No se encontró la sala del horario ${horario.tipo}.`);
+    await ClaseProgramada.updateOne(
+      { horario: horario._id, fecha: hoy },
+      {
+        $setOnInsert: {
+          horario: horario._id,
+          fecha: hoy,
+          tipo: horario.tipo,
+          profesional: horario.profesional,
+          sala: sala._id,
+          horaInicio: horario.horaInicio,
+          horaFin: horaFin(horario.horaInicio, duracionMinutos),
+          capacidad: sala.capacidad,
+          reservas: 0,
+          activa: true,
+        },
+      },
+      { upsert: true }
+    );
+  }
+};
+
 const sembrar = async () => {
+  validarHorariosDePrueba(HORARIOS_DE_PRUEBA);
   await conectarDB();
 
   await Promise.all([
@@ -163,19 +222,20 @@ const sembrar = async () => {
     HORARIOS_DE_PRUEBA.map((clase) => ({
       tipo: clase.tipo,
       horaInicio: clase.horaInicio,
-      comienzaDesde:
-        clase.diaSemana === undefined
-          ? fechaDeInicio(clase.horaInicio, ahora)
-          : fechaDelProximoDia(clase.diaSemana, clase.horaInicio, ahora),
-      repetirSemanas: 2,
+      comienzaDesde: fechaDeInicioParaDia(clase.diaSemana, ahora),
+      repetirSemanas: clase.repetirSemanas,
       sala: salas[clase.sala]._id,
       profesional: profesionales[clase.profesional]._id,
       activo: true,
     }))
   );
   await generarClasesFuturas();
+  const hoy = `${ahora.year}-${ahora.month}-${ahora.day}`;
+  await asegurarClasesDeHoy(horarios, hoy, 60);
 
   let totalReservas = 0;
+  let indiceCliente = 0;
+  const clientesReservadosPorFecha = new Map();
   for (const [indiceHorario, horario] of horarios.entries()) {
     const ocurrencias = await ClaseProgramada.find({ horario: horario._id }).sort({ fecha: 1 });
     const cantidades = HORARIOS_DE_PRUEBA[indiceHorario].reservasPorOcurrencia;
@@ -185,11 +245,15 @@ const sembrar = async () => {
           `pero se generaron ${ocurrencias.length}.`
       );
     }
-    const diaEsperado = HORARIOS_DE_PRUEBA[indiceHorario].diaSemana;
+    const horarioDePrueba = HORARIOS_DE_PRUEBA[indiceHorario];
+    if (ocurrencias.length !== SEMANAS_DE_PRUEBA) {
+      throw new Error(`El horario ${horario.tipo} no generó sus 8 clases semanales.`);
+    }
     if (
-      diaEsperado !== undefined &&
       ocurrencias.some(
-        ({ fecha }) => new Date(`${fecha}T12:00:00Z`).getUTCDay() !== diaEsperado
+        ({ fecha }, semana) =>
+          new Date(`${fecha}T12:00:00Z`).getUTCDay() !== horarioDePrueba.diaSemana ||
+          fecha !== sumarDias(horario.comienzaDesde, semana * 7)
       )
     ) {
       throw new Error(`Las clases de ${horario.tipo} no quedaron en el día semanal esperado.`);
@@ -201,8 +265,27 @@ const sembrar = async () => {
         throw new Error(`La cantidad de reservas de ${clase.tipo} supera su capacidad o los clientes disponibles.`);
       }
 
+      const clientesDeLaFecha = clientesReservadosPorFecha.get(clase.fecha) || new Set();
+      if (clientesDeLaFecha.size + cantidad > clientes.length) {
+        throw new Error(`Hay más reservas que clientes distintos el ${clase.fecha}.`);
+      }
+      const clientesElegidos = [];
+      for (let desplazamiento = 0; desplazamiento < clientes.length; desplazamiento += 1) {
+        const indice = (indiceCliente + desplazamiento) % clientes.length;
+        const cliente = clientes[indice];
+        if (clientesDeLaFecha.has(String(cliente._id))) continue;
+        clientesElegidos.push(cliente);
+        if (clientesElegidos.length === cantidad) break;
+      }
+      if (clientesElegidos.length !== cantidad) {
+        throw new Error(`No hay suficientes clientes distintos para reservar ${clase.tipo} el ${clase.fecha}.`);
+      }
+      clientesElegidos.forEach((cliente) => clientesDeLaFecha.add(String(cliente._id)));
+      clientesReservadosPorFecha.set(clase.fecha, clientesDeLaFecha);
+      indiceCliente = (indiceCliente + cantidad) % clientes.length;
+
       await ReservaClase.insertMany(
-        clientes.slice(0, cantidad).map((cliente) => ({
+        clientesElegidos.map((cliente) => ({
           clase: clase._id,
           cliente: cliente._id,
         }))
@@ -214,8 +297,9 @@ const sembrar = async () => {
 
   console.log(
     `Datos cargados: ${clientes.length} clientes, ${profesionales.length} profesores, ` +
-      `${salas.length} salas y ${HORARIOS_DE_PRUEBA.length} clases repetidas por 2 semanas ` +
-      `(${HORARIOS_DE_PRUEBA.length * 2} ocurrencias y ${totalReservas} reservas de prueba).`
+      `${salas.length} salas y ${HORARIOS_DE_PRUEBA.length} horarios (3 por día durante ` +
+      `${SEMANAS_DE_PRUEBA} semanas; ${HORARIOS_DE_PRUEBA.length * SEMANAS_DE_PRUEBA} clases y ` +
+      `${totalReservas} reservas de prueba).`
   );
   console.log(
     `Usuarios de prueba: admin/admin123, recepcion/recepcion123, profesional1/prof1234, ` +
@@ -237,6 +321,7 @@ module.exports = {
   PROFESIONALES,
   SALAS_DE_PRUEBA,
   HORARIOS_DE_PRUEBA,
-  fechaDeInicio,
-  fechaDelProximoDia,
+  SEMANAS_DE_PRUEBA,
+  fechaDeInicioParaDia,
+  validarHorariosDePrueba,
 };
