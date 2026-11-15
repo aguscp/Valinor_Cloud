@@ -23,20 +23,23 @@ const prepararDatos = (formulario) => {
 
 const sincronizarProfesional = (formulario) => {
   const esProfesional = formulario.rol.value === "profesional";
-  const esCliente = formulario.rol.value === "cliente";
   formulario.profesional.disabled = !esProfesional;
   formulario.profesional.required = esProfesional;
+  if (!esProfesional) formulario.profesional.value = "";
+};
+
+const sincronizarCliente = (formulario) => {
+  const esCliente = formulario.rol.value === "cliente";
   formulario.cliente.disabled = !esCliente;
   formulario.cliente.required = esCliente;
-  if (!esProfesional) formulario.profesional.value = "";
   if (!esCliente) formulario.cliente.value = "";
 };
 
 const estadoDe = (usuario) => {
   const vencido = usuario.expiraEl && new Date(usuario.expiraEl) <= new Date();
-  if (!usuario.activo) return crearEtiqueta("inactivo", "estado-cancelado");
-  if (vencido) return crearEtiqueta("vencido", "estado-cancelado");
-  return crearEtiqueta("activo", "estado-atendido");
+  if (!usuario.activo) return crearEtiqueta("inactivo", "etiqueta-peligro");
+  if (vencido) return crearEtiqueta("vencido", "etiqueta-peligro");
+  return crearEtiqueta("activo", "etiqueta-exito");
 };
 
 const abrirEdicion = (usuario) => {
@@ -48,6 +51,7 @@ const abrirEdicion = (usuario) => {
     expiraEl: aFechaLocal(usuario.expiraEl),
   });
   sincronizarProfesional(formEditar);
+  sincronizarCliente(formEditar);
   mostrarError(errorEdicion, "");
   modalEditar.hidden = false;
 };
@@ -62,7 +66,13 @@ const cambiarActivo = async (usuario) => {
 };
 
 const eliminarUsuario = async (usuario) => {
-  if (!confirm(`¿Eliminar el usuario ${usuario.usuario}?`)) return;
+  const confirmado = await confirmar({
+    titulo: "Eliminar usuario",
+    mensaje: `¿Eliminar el usuario ${usuario.usuario}? Esta acción no se puede deshacer.`,
+    textoConfirmar: "Eliminar",
+    variante: "peligro",
+  });
+  if (!confirmado) return;
   try {
     await api(`/api/usuarios/${usuario._id}`, { method: "DELETE" });
     await cargarUsuarios();
@@ -125,13 +135,17 @@ const cargarProfesionales = async () => {
 const cargarClientes = async () => {
   const clientes = await api("/api/clientes");
   document.querySelectorAll(".select-cliente").forEach((select) => {
-    llenarSelect(select, clientes, (cliente) => `${cliente.apellido}, ${cliente.nombre}`);
+    llenarSelect(select, clientes, (c) => `${c.apellido}, ${c.nombre} (DNI ${c.dni})`);
   });
 };
 
 [formAlta, formEditar].filter(Boolean).forEach((formulario) => {
-  formulario.rol.addEventListener("change", () => sincronizarProfesional(formulario));
+  formulario.rol.addEventListener("change", () => {
+    sincronizarProfesional(formulario);
+    sincronizarCliente(formulario);
+  });
   sincronizarProfesional(formulario);
+  sincronizarCliente(formulario);
 });
 
 if (formAlta) {
@@ -142,6 +156,7 @@ if (formAlta) {
       await api("/api/usuarios", { method: "POST", body: prepararDatos(formAlta) });
       formAlta.reset();
       sincronizarProfesional(formAlta);
+      sincronizarCliente(formAlta);
       await cargarUsuarios();
     } catch (error) {
       mostrarError(errorAlta, error.message);
@@ -162,7 +177,6 @@ formEditar.addEventListener("submit", async (evento) => {
 });
 
 configurarModal(modalEditar);
-cargarProfesionales()
-  .then(cargarClientes)
+Promise.all([cargarProfesionales(), cargarClientes()])
   .then(cargarUsuarios)
   .catch((error) => mostrarError(errorListado, error.message));

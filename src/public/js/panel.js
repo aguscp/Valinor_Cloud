@@ -1,35 +1,44 @@
-const tablaTurnos = document.getElementById("tablaTurnos");
-const sinTurnos = document.getElementById("sinTurnos");
-const errorTurnos = document.getElementById("errorTurnos");
+const tablaReservas = document.getElementById("tablaReservas");
+const sinReservas = document.getElementById("sinReservas");
+const errorReservas = document.getElementById("errorReservas");
 
 const fechaDeHoy = () => {
-  const hoy = new Date();
-  const mes = String(hoy.getMonth() + 1).padStart(2, "0");
-  const dia = String(hoy.getDate()).padStart(2, "0");
-  return `${hoy.getFullYear()}-${mes}-${dia}`;
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(new Date())
+      .map(({ type, value }) => [type, value])
+  );
+  return `${partes.year}-${partes.month}-${partes.day}`;
 };
 
-const actualizarResumen = (turnos) => {
-  const contar = (estado) => turnos.filter((turno) => turno.estado === estado).length;
-  document.getElementById("cantidadReservados").textContent = contar("reservado");
-  document.getElementById("cantidadAtendidos").textContent = contar("atendido");
-  document.getElementById("cantidadCancelados").textContent = contar("cancelado");
+const actualizarResumen = (reservas) => {
+  const contar = (estado) => reservas.filter((reserva) => reserva.estado === estado).length;
+  document.getElementById("cantidadReservados").textContent = contar("reservada");
+  document.getElementById("cantidadAtendidos").textContent = contar("asistida");
+  document.getElementById("cantidadCancelados").textContent = contar("cancelada");
 };
 
-const cargarTurnosDeHoy = async () => {
+const cargarReservasDeHoy = async () => {
   try {
-    const turnos = await api(`/api/turnos?fecha=${fechaDeHoy()}`);
-    tablaTurnos.replaceChildren(
-      ...turnos.map((turno) =>
-        crearFilaTurno(turno, cargarTurnosDeHoy, (mensaje) => mostrarError(errorTurnos, mensaje))
+    const reservas = await api(`/api/clases/reservas?fecha=${fechaDeHoy()}`);
+    tablaReservas.replaceChildren(
+      ...reservas.map((reserva) =>
+        crearFilaReservaClase(reserva, cargarReservasDeHoy, (mensaje) =>
+          mostrarError(errorReservas, mensaje)
+        )
       )
     );
-    sinTurnos.hidden = turnos.length > 0;
-    actualizarResumen(turnos);
-    mostrarError(errorTurnos, "");
+    sinReservas.hidden = reservas.length > 0;
+    actualizarResumen(reservas);
+    mostrarError(errorReservas, "");
   } catch (error) {
-    mostrarError(errorTurnos, error.message);
+    mostrarError(errorReservas, error.message);
   }
 };
 
-cargarTurnosDeHoy();
+cargarReservasDeHoy();

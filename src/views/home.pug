@@ -1,38 +1,25 @@
 extends layout
 
 block content
-  h1 Hola, #{usuario.nombre}
-  p
-    | Rol: 
-    strong= usuario.rol
-    if usuario.rol === "profesional"
-      |  - Ves únicamente tus propios turnos.
+  +encabezado("Hola, " + usuario.nombre)
+    p(class="flex flex-wrap items-center gap-2 text-sm text-gray-600")
+      span Rol:
+      span.etiqueta.etiqueta-info= usuario.rol
+      if usuario.rol === "profesional"
+        span Ves únicamente tus propias clases.
 
-  h2 Turnos de hoy
-  .resumen
-    .tarjeta
-      span.numero#cantidadReservados 0
-      span Reservados
-    .tarjeta
-      span.numero#cantidadAtendidos 0
-      span Atendidos
-    .tarjeta
-      span.numero#cantidadCancelados 0
-      span Cancelados
+  section(aria-labelledby="tituloResumen")
+    h2#tituloResumen(class="mb-3 text-lg font-semibold text-gray-900") Reservas de hoy
+    div(class="grid grid-cols-1 gap-4 sm:grid-cols-3")
+      +tarjetaResumen("cantidadReservados", "Reservas activas", "reloj", "confirmado")
+      +tarjetaResumen("cantidadAtendidos", "Asistencias", "atendido", "finalizado")
+      +tarjetaResumen("cantidadCancelados", "Cancelaciones", "cancelado", "cancelado")
 
-  .error#errorTurnos(hidden)
-  table
-    thead
-      tr
-        th Fecha
-        th Hora
-        th Cliente
-        th Profesional
-        th Estado
-        th Acciones
-    tbody#tablaTurnos
-  p#sinTurnos(hidden) No hay turnos para hoy.
+  +seccion("Clases del día")
+    +alerta("errorReservas")
+    +tabla(["Fecha", "Hora", "Clase", "Cliente", "Instructor", "Sala", "Estado", "Acciones"], "tablaReservas")
+    +vacio("sinReservas", "No hay reservas para hoy.")
 
 block scripts
-  script(src="/js/turnosTabla.js")
+  script(src="/js/reservasTabla.js")
   script(src="/js/panel.js")

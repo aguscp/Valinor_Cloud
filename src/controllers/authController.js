@@ -1,46 +1,32 @@
 const Usuario = require("../models/Usuario");
 const Cliente = require("../models/Cliente");
 const { permisosDe } = require("../config/roles");
+const { tomarCampos, describirCambios } = require("../helpers/campos");
 const { registrarAuditoria } = require("../helpers/auditoria");
-const { destruirSesion } = require("../middlewares/auth");
-
-const regenerarSesion = (req) =>
-  new Promise((resolve, reject) => {
-    req.session.regenerate((error) => (error ? reject(error) : resolve()));
-  });
+const { autenticar } = require("../middlewares/auth");
+const { firmarToken, enviarTokenEnCookie, borrarCookieToken } = require("../helpers/token");
+const { desconectarUsuario } = require("../socket/emisor");
 
 const login = async (req, res) => {
-  const { usuario: usuarioIngresado, password: passwordIngresada } = req.body || {};
-  const nombreUsuario = String(usuarioIngresado || "").trim().toLowerCase();
-  const password = String(passwordIngresada || "");
+  const { usuario: usuarioIngresado, password } = req.body || {};
 
-  if (!nombreUsuario || !password) {
+  if (!String(usuarioIngresado || "").trim() || !password) {
     return res.status(400).json({ error: "Ingresá usuario y contraseña" });
   }
 
-  const usuario = await Usuario.findOne({ usuario: nombreUsuario }).select("+password");
+  const { usuario, info } = await autenticar("local", req, res);
 
-  if (!usuario || usuario.password !== password) {
+  if (!usuario) {
     await registrarAuditoria(req, "LOGIN_FALLIDO", {
-      usuarioNombre: nombreUsuario,
-      detalle: "Usuario o contraseña incorrectos",
+      usuario: info.usuario,
+      usuarioNombre: info.usuarioNombre,
+      detalle: info.detalle,
     });
-    return res.status(401).json({ error: "Usuario o contraseña incorrectos" });
+    return res.status(info.status || 401).json({ error: info.error || "No se pudo iniciar sesión" });
   }
 
-  if (!usuario.estaHabilitado()) {
-    await registrarAuditoria(req, "LOGIN_FALLIDO", {
-      usuario,
-      detalle: "Usuario desactivado o vencido",
-    });
-    return res
-      .status(403)
-      .json({ error: "Tu usuario está deshabilitado. Contactá a un administrador" });
-  }
-
-  await regenerarSesion(req);
-  req.session.usuarioId = usuario._id.toString();
-  req.session.usuarioNombre = usuario.usuario;
+  const token = firmarToken(usuario);
+  enviarTokenEnCookie(res, token);
 
   await Usuario.updateOne(
     { _id: usuario._id },
@@ -49,128 +35,21 @@ const login = async (req, res) => {
   );
   await registrarAuditoria(req, "LOGIN", { usuario, entidad: "Usuario", entidadId: usuario._id });
 
-  res.json({ usuario: usuario.usuario, nombre: usuario.nombre, rol: usuario.rol });
+  res.json({ token, usuario: usuario.usuario, nombre: usuario.nombre, rol: usuario.rol });
 };
 
-const verificarRegistroCliente = async (req, res) => {
-  const dni = String((req.body || {}).dni || "").trim();
-  if (!/^\d{7,8}$/.test(dni)) {
-    return res.status(400).json({ error: "Ingresá un DNI válido de 7 u 8 números" });
-  }
-
-  const clientes = await Cliente.find({ dni });
-  if (clientes.length !== 1) {
-    return res.status(clientes.length ? 409 : 404).json({
-      error: clientes.length
-        ? "Hay más de un cliente con ese DNI. Contactá a recepción"
-        : "No encontramos un cliente registrado con ese DNI",
-    });
-  }
-
-  if (await Usuario.exists({ cliente: clientes[0]._id })) {
-    return res.status(409).json({ error: "Ese cliente ya tiene una cuenta. Iniciá sesión" });
-  }
-
-  res.json({ disponible: true });
-};
-
-const registrarCliente = async (req, res) => {
-  const { usuario: usuarioIngresado, password: passwordIngresada } = req.body || {};
-  const dni = String((req.body || {}).dni || "").trim();
-  const usuarioNombre = String(usuarioIngresado || "").trim().toLowerCase();
-  const password = String(passwordIngresada || "");
-
-  if (!/^\d{7,8}$/.test(dni) || !usuarioNombre || !password) {
-    return res.status(400).json({ error: "Ingresá un DNI válido, usuario y contraseña" });
-  }
-
-  const clientes = await Cliente.find({ dni });
-  if (clientes.length !== 1) {
-    return res.status(clientes.length ? 409 : 404).json({
-      error: clientes.length
-        ? "Hay más de un cliente con ese DNI. Contactá a recepción"
-        : "No encontramos un cliente registrado con ese DNI",
-    });
-  }
-
-  const cliente = clientes[0];
-  if (await Usuario.exists({ cliente: cliente._id })) {
-    return res.status(409).json({ error: "Ese cliente ya tiene una cuenta. Iniciá sesión" });
-  }
-
-  const cuenta = await Usuario.create({
-    usuario: usuarioNombre,
-    password,
-    nombre: `${cliente.nombre} ${cliente.apellido}`,
-    rol: "cliente",
-    cliente: cliente._id,
-  });
-  await registrarAuditoria(req, "CREAR", {
-    entidad: "Usuario",
-    entidadId: cuenta._id,
-    detalle: `${cuenta.usuario} con rol cliente`,
-  });
-
-  res.status(201).json({ usuario: cuenta.usuario });
-};
-
-const registrarNuevoCliente = async (req, res) => {
-  const datos = req.body || {};
-  const cliente = new Cliente({
-    nombre: datos.nombre,
-    apellido: datos.apellido,
-    dni: String(datos.dni || "").trim(),
-    telefono: datos.telefono,
-    email: datos.email,
-  });
-  const usuarioNombre = String(datos.usuario || "").trim().toLowerCase();
-  const password = String(datos.password || "");
-  const cuenta = new Usuario({
-    usuario: usuarioNombre,
-    password,
-    nombre: `${cliente.nombre || ""} ${cliente.apellido || ""}`.trim(),
-    rol: "cliente",
-    cliente: cliente._id,
-  });
-  await cliente.validate();
-  await cuenta.validate();
-
-  if (await Cliente.exists({ dni: cliente.dni })) {
-    return res.status(409).json({
-      error: "Ya existe un cliente con ese DNI. Elegí Cliente Existente",
-    });
-  }
-  if (await Usuario.exists({ usuario: usuarioNombre })) {
-    return res.status(409).json({ error: "Ese nombre de usuario ya está en uso" });
-  }
-
-  await cliente.save();
-
-  try {
-    await cuenta.save();
-  } catch (error) {
-    await Cliente.deleteOne({ _id: cliente._id });
-    throw error;
-  }
-
-  await registrarAuditoria(req, "CREAR", {
-    entidad: "Cliente",
-    entidadId: cliente._id,
-    detalle: `${cliente.nombre} ${cliente.apellido} (DNI ${cliente.dni})`,
-  });
-  await registrarAuditoria(req, "CREAR", {
-    entidad: "Usuario",
-    entidadId: cuenta._id,
-    detalle: `${cuenta.usuario} con rol cliente`,
-  });
-
-  res.status(201).json({ usuario: cuenta.usuario });
-};
-
+// Sin sesiones en el servidor: el logout sube tokenVersion para invalidar los
+// tokens ya emitidos de este usuario y borra la cookie del navegador.
 const logout = async (req, res) => {
+  await Usuario.updateOne(
+    { _id: req.usuario._id },
+    { $inc: { tokenVersion: 1 } },
+    { timestamps: false }
+  );
   await registrarAuditoria(req, "LOGOUT", { entidad: "Usuario", entidadId: req.usuario._id });
-  await destruirSesion(req);
-  res.clearCookie("connect.sid");
+  // Los sockets abiertos (chat) se autenticaron con el token viejo: se cierran.
+  desconectarUsuario(req.usuario._id);
+  borrarCookieToken(res);
   res.status(204).end();
 };
 
@@ -179,11 +58,100 @@ const usuarioActual = (req, res) => {
   res.json({ usuario, nombre, rol, ultimoAcceso, permisos: permisosDe(rol) });
 };
 
+const perfilCliente = async (req, res) => {
+  if (req.usuario.rol !== "cliente" || !req.usuario.cliente) {
+    return res.status(403).json({ error: "Esta sección es solo para cuentas de clientes" });
+  }
+
+  const cliente = await Cliente.findById(req.usuario.cliente);
+  if (!cliente) return res.status(404).json({ error: "No se encontró el perfil del cliente" });
+  res.json(cliente);
+};
+
+const actualizarPerfilCliente = async (req, res) => {
+  if (req.usuario.rol !== "cliente" || !req.usuario.cliente) {
+    return res.status(403).json({ error: "Esta sección es solo para cuentas de clientes" });
+  }
+
+  const cliente = await Cliente.findById(req.usuario.cliente);
+  if (!cliente) return res.status(404).json({ error: "No se encontró el perfil del cliente" });
+
+  cliente.set(tomarCampos(req.body, ["nombre", "apellido", "telefono", "email"]));
+  const cambios = describirCambios(cliente);
+  await cliente.save();
+
+  const nombreActualizado = `${cliente.nombre} ${cliente.apellido}`;
+  if (req.usuario.nombre !== nombreActualizado) {
+    req.usuario.nombre = nombreActualizado;
+    await req.usuario.save();
+  }
+
+  await registrarAuditoria(req, "MODIFICAR", {
+    entidad: "Cliente",
+    entidadId: cliente._id,
+    detalle: `Perfil propio - campos: ${cambios}`,
+  });
+  res.json(cliente);
+};
+
+const registrarCliente = async (req, res) => {
+  const datos = tomarCampos(req.body, [
+    "nombre",
+    "apellido",
+    "dni",
+    "telefono",
+    "email",
+    "usuario",
+    "password",
+  ]);
+  const cliente = new Cliente(
+    tomarCampos(datos, ["nombre", "apellido", "dni", "telefono", "email"])
+  );
+  const usuario = new Usuario({
+    usuario: datos.usuario,
+    password: datos.password,
+    nombre: `${datos.nombre || ""} ${datos.apellido || ""}`.trim(),
+    rol: "cliente",
+  });
+  usuario.cliente = cliente._id;
+
+  await Promise.all([cliente.validate(), usuario.validate()]);
+  await cliente.save();
+
+  try {
+    await usuario.save();
+  } catch (error) {
+    await cliente.deleteOne();
+    throw error;
+  }
+
+  const token = firmarToken(usuario);
+  enviarTokenEnCookie(res, token);
+  await Usuario.updateOne(
+    { _id: usuario._id },
+    { ultimoAcceso: new Date() },
+    { timestamps: false }
+  );
+  await registrarAuditoria(req, "CREAR", {
+    usuario,
+    entidad: "Usuario",
+    entidadId: usuario._id,
+    detalle: `Registro de cliente vinculado a ${cliente._id}`,
+  });
+
+  res.status(201).json({
+    token,
+    usuario: usuario.usuario,
+    nombre: usuario.nombre,
+    rol: usuario.rol,
+  });
+};
+
 module.exports = {
   login,
-  verificarRegistroCliente,
-  registrarCliente,
-  registrarNuevoCliente,
   logout,
   usuarioActual,
+  perfilCliente,
+  actualizarPerfilCliente,
+  registrarCliente,
 };

@@ -1,64 +1,129 @@
-const tablaTurnos = document.getElementById("tablaTurnos");
-const sinTurnos = document.getElementById("sinTurnos");
-const errorTurnos = document.getElementById("errorTurnos");
+const tablaReservas = document.getElementById("tablaReservas");
+const sinReservas = document.getElementById("sinReservas");
+const errorReservas = document.getElementById("errorReservas");
 const formAlta = document.getElementById("formAlta");
 const errorAlta = document.getElementById("errorAlta");
+const mensajeAlta = document.getElementById("mensajeAlta");
 const formFiltros = document.getElementById("formFiltros");
+let clasesDisponibles = [];
 
-const mostrarErrorTurnos = (mensaje) => mostrarError(errorTurnos, mensaje);
+const mostrarErrorReservas = (mensaje) => mostrarError(errorReservas, mensaje);
 
-const cargarTurnos = async () => {
+const cargarReservas = async () => {
   const filtros = new URLSearchParams();
   Object.entries(leerFormulario(formFiltros)).forEach(([clave, valor]) => {
     if (valor) filtros.append(clave, valor);
   });
 
   try {
-    const turnos = await api(`/api/turnos?${filtros}`);
-    tablaTurnos.replaceChildren(
-      ...turnos.map((turno) => crearFilaTurno(turno, cargarTurnos, mostrarErrorTurnos))
+    const reservas = await api(`/api/clases/reservas?${filtros}`);
+    tablaReservas.replaceChildren(
+      ...reservas.map((reserva) =>
+        crearFilaReservaClase(
+          reserva,
+          async () => {
+            await cargarReservas();
+            if (formAlta) await cargarOpcionesAlta();
+          },
+          mostrarErrorReservas
+        )
+      )
     );
-    sinTurnos.hidden = turnos.length > 0;
-    mostrarErrorTurnos("");
+    sinReservas.hidden = reservas.length > 0;
+    mostrarErrorReservas("");
   } catch (error) {
-    mostrarErrorTurnos(error.message);
+    mostrarErrorReservas(error.message);
   }
 };
 
 const cargarOpcionesAlta = async () => {
-  const [clientes, profesionales] = await Promise.all([
+  const [clientes, clases] = await Promise.all([
     api("/api/clientes"),
-    api("/api/profesionales"),
+    api("/api/clases/para-reservar"),
   ]);
+  clasesDisponibles = clases;
   llenarSelect(formAlta.cliente, clientes, (c) => `${c.apellido}, ${c.nombre} (DNI ${c.dni})`);
-  llenarSelect(
-    formAlta.profesional,
-    profesionales,
-    (p) => `${p.apellido}, ${p.nombre} - ${p.especialidad}`
+  formAlta.clase.replaceChildren(
+    new Option(
+      clases.length ? "Seleccioná una clase" : "No hay clases futuras con cupos disponibles",
+      ""
+    )
   );
+  clases.forEach((clase) => {
+    const fecha = new Date(`${clase.fecha}T12:00:00Z`).toLocaleDateString("es-AR", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+    const lugares = clase.capacidad - clase.reservas;
+    const profesional = clase.profesional
+      ? `${clase.profesional.apellido}, ${clase.profesional.nombre}`
+      : "Instructor no disponible";
+    const opcion = new Option(
+      `${fecha} · ${clase.horaInicio} · ${clase.tipo} · ${profesional} · ${lugares} lugares`,
+      clase._id
+    );
+    opcion.disabled = lugares <= 0;
+    formAlta.clase.add(opcion);
+  });
 };
 
 if (formAlta) {
+  const detalleClaseAlta = document.getElementById("detalleClaseAlta");
+
+  formAlta.clase.addEventListener("change", () => {
+    mensajeAlta.hidden = true;
+    const clase = clasesDisponibles.find((item) => item._id === formAlta.clase.value);
+    detalleClaseAlta.textContent = clase
+      ? `${clase.tipo} · ${new Date(`${clase.fecha}T12:00:00Z`).toLocaleDateString("es-AR", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          timeZone: "UTC",
+        })} · ${clase.horaInicio}–${clase.horaFin} · ${clase.sala ? clase.sala.nombre : "Sala no disponible"} · ${clase.capacidad - clase.reservas} lugares disponibles`
+      : "";
+    detalleClaseAlta.hidden = !clase;
+  });
+  formAlta.cliente.addEventListener("change", () => {
+    mensajeAlta.hidden = true;
+  });
+
   formAlta.addEventListener("submit", async (evento) => {
     evento.preventDefault();
     mostrarError(errorAlta, "");
+    mensajeAlta.hidden = true;
+    const { cliente, clase } = leerFormulario(formAlta);
+    const clienteSeleccionado = formAlta.cliente.selectedOptions[0].textContent;
+    const claseSeleccionada = formAlta.clase.selectedOptions[0].textContent;
     try {
-      await api("/api/turnos", { method: "POST", body: leerFormulario(formAlta) });
-      formAlta.fecha.value = "";
-      formAlta.hora.value = "";
-      await cargarTurnos();
+      await api(`/api/clases/${clase}/reservas-para-cliente`, {
+        method: "POST",
+        body: { cliente },
+      });
     } catch (error) {
       mostrarError(errorAlta, error.message);
+      return;
     }
+
+    formAlta.reset();
+    detalleClaseAlta.hidden = true;
+    mensajeAlta.textContent = `Se reservó ${claseSeleccionada} para ${clienteSeleccionado}.`;
+    mensajeAlta.hidden = false;
+    await cargarOpcionesAlta().catch((error) =>
+      mostrarError(errorAlta, `La reserva se creó, pero no se pudo actualizar la lista: ${error.message}`)
+    );
+    await cargarReservas();
   });
 
   cargarOpcionesAlta().catch((error) => mostrarError(errorAlta, error.message));
 }
 
-formFiltros.addEventListener("change", cargarTurnos);
+formFiltros.addEventListener("change", cargarReservas);
 document.getElementById("btnLimpiarFiltros").addEventListener("click", () => {
   formFiltros.reset();
-  cargarTurnos();
+  cargarReservas();
 });
 
-cargarTurnos();
+cargarReservas();

@@ -1,27 +1,22 @@
 extends layout
 
 block content
-  h1 Mi perfil
-  p Podés actualizar tu nombre, apellido, teléfono y email. El DNI no se puede modificar.
-  .error#errorPerfil(hidden)
-  p#estadoPerfil(hidden)
-  form#formPerfil
-    .form-group
-      label(for="nombre") Nombre *
-      input#nombre(type="text" name="nombre" required)
-    .form-group
-      label(for="apellido") Apellido *
-      input#apellido(type="text" name="apellido" required)
-    .form-group
-      label(for="dni") DNI
-      input#dni(type="text" name="dni" readonly)
-    .form-group
-      label(for="telefono") Teléfono
-      input#telefono(type="text" name="telefono")
-    .form-group
-      label(for="email") Email
-      input#email(type="email" name="email")
-    button(type="submit") Guardar cambios
+  +encabezado("Mi perfil", "Actualizá tus datos de contacto. El DNI no se puede modificar.")
+
+  +seccion("Datos personales")
+    +alerta("errorPerfil")
+    p#mensajeExito(hidden role="status" class="mb-4 rounded-lg border border-turno-presente/30 bg-turno-presente/10 px-4 py-3 text-sm font-medium text-green-900")
+    form#formPerfil(class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2")
+      +campo("nombre", "Nombre")(type="text" name="nombre" autocomplete="given-name" required)
+      +campo("apellido", "Apellido")(type="text" name="apellido" autocomplete="family-name" required)
+      +campo("dni", "DNI", { sinMarca: true })(type="text" name="dni" readonly aria-describedby="ayudaDni" class="cursor-not-allowed bg-gray-100")
+      p#ayudaDni(class="text-xs text-gray-500 sm:col-span-2") El DNI no se puede modificar.
+      +campo("telefono", "Teléfono")(type="tel" name="telefono" autocomplete="tel")
+      +campo("email", "Email")(type="email" name="email" autocomplete="email")
+      +botonera
+        button.btn.btn-primario(type="submit")
+          +icono("guardar")(class="size-4")
+          | Guardar cambios
 
 block scripts
-  script(src="/js/mi-perfil.js")
+  script(src="/js/miPerfil.js")

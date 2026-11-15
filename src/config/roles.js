@@ -1,14 +1,24 @@
-const ROLES = ["profesional", "recepcion", "admin", "cliente"];
+const ROLES = ["cliente", "profesional", "recepcion", "admin"];
 
+const cliente = [
+  "profesionales:read",
+  "turnos:read",
+  "chat:usar",
+  "clases:read",
+  "clases:reservar",
+  "clases:cancelar",
+];
 const profesional = [
   "clientes:read",
   "profesionales:read",
   "turnos:read",
   "turnos:update",
+  "chat:usar",
+  "clases:gestionar",
 ];
 
 const recepcion = [
-  ...profesional,
+  ...profesional.filter((permiso) => permiso !== "clases:gestionar"),
   "clientes:create",
   "clientes:update",
   "clientes:delete",
@@ -26,11 +36,12 @@ const admin = [
   "usuarios:update",
   "usuarios:delete",
   "auditoria:read",
+  "chat:moderar",
+  "salas:manage",
+  "clases:configurar",
 ];
 
-const cliente = ["turnos:read"];
-
-const PERMISOS_POR_ROL = { profesional, recepcion, admin, cliente };
+const PERMISOS_POR_ROL = { cliente, profesional, recepcion, admin };
 
 const permisosDe = (rol) => PERMISOS_POR_ROL[rol] || [];
 

@@ -1,0 +1,36 @@
+extends ../layout
+
+block content
+  +encabezado("Mis horarios", "Publicá clases semanales. La duración de cada clase se muestra al configurar el horario y podés cambiar la sala o el horario cuando lo necesites.")
+
+  +seccion("Agregar horario semanal", "Los cambios conservan las clases que ya tienen reservas y se aplican a las próximas fechas sin alumnos anotados.")
+    +alerta("errorHorario")
+    p#mensajeHorario(hidden role="status" class="mb-4 rounded-lg border border-turno-presente/30 bg-turno-presente/10 px-4 py-3 text-sm font-medium text-green-900")
+    form#formHorario(class="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 xl:grid-cols-4")
+      +campo("tipoClase", "Tipo de clase")(type="text" name="tipo" maxlength="80" placeholder="Pilates Reformer" required)
+      +campoSelect("diaSemana", "Día")(name="diaSemana" required)
+        option(value="") Seleccioná un día
+        option(value="1") Lunes
+        option(value="2") Martes
+        option(value="3") Miércoles
+        option(value="4") Jueves
+        option(value="5") Viernes
+        option(value="6") Sábado
+        option(value="0") Domingo
+      +campo("horaInicio", "Hora de inicio")(type="time" name="horaInicio" step="60" required)
+      +campoSelect("salaHorario", "Sala disponible")(name="sala" required disabled)
+        option(value="") Elegí día y hora
+      p#duracionHorario(class="text-sm text-gray-600 md:col-span-2 xl:col-span-4")
+      +botonera
+        button.btn.btn-secundario#cancelarEdicionHorario(type="button" hidden) Cancelar edición
+        button.btn.btn-primario(type="submit")
+          +icono("mas")(class="size-4")
+          span#textoGuardarHorario Publicar horario
+
+  +seccion("Horarios semanales publicados")
+    +alerta("errorListadoHorarios")
+    +tabla(["Clase", "Día", "Horario", "Sala", "Capacidad", "Estado", "Acciones"], "tablaHorarios")
+    +vacio("sinHorarios", "Todavía no publicaste horarios.")
+
+block scripts
+  script(src="/js/horariosClases.js")

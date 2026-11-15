@@ -2,24 +2,42 @@ const { ROLES } = require("../config/roles");
 const { ACCIONES } = require("../models/Auditoria");
 
 const mostrarLogin = (req, res) => {
-  if (req.session.usuarioId) return res.redirect("/");
+  if (req.usuario) return res.redirect(req.usuario.rol === "cliente" ? "/clases" : "/");
   res.render("login");
 };
 
-const mostrarRegistro = (req, res) => res.render("registro");
+const mostrarRegistro = (req, res) => {
+  if (req.usuario) return res.redirect(req.usuario.rol === "cliente" ? "/clases" : "/");
+  res.render("registro");
+};
 
-const mostrarMiPerfil = (req, res) => {
+const mostrarPanel = (req, res) => {
+  if (req.usuario.rol === "cliente") return res.redirect("/clases");
+  res.render("home");
+};
+
+const mostrarClientes = (req, res) => res.render("clientes/index");
+
+const mostrarProfesionales = (req, res) => {
+  if (req.usuario.rol === "cliente") return res.redirect("/turnos");
+  res.render("profesionales/index");
+};
+
+const mostrarTurnos = (req, res) => res.render("turnos/index");
+
+const mostrarClases = (req, res) => res.render("clases/index");
+
+const mostrarPerfilCliente = (req, res) => {
   if (req.usuario.rol !== "cliente") return res.redirect("/");
   res.render("mi-perfil");
 };
 
-const mostrarPanel = (req, res) => res.render("home");
+const mostrarHorariosDocente = (req, res) => {
+  if (req.usuario.rol !== "profesional") return res.redirect("/");
+  res.render("clases/horarios");
+};
 
-const mostrarClientes = (req, res) => res.render("clientes/index");
-
-const mostrarProfesionales = (req, res) => res.render("profesionales/index");
-
-const mostrarTurnos = (req, res) => res.render("turnos/index");
+const mostrarSalas = (req, res) => res.render("salas/index");
 
 const mostrarUsuarios = (req, res) => res.render("usuarios/index", { roles: ROLES });
 
@@ -28,11 +46,14 @@ const mostrarAuditoria = (req, res) => res.render("auditoria/index", { acciones:
 module.exports = {
   mostrarLogin,
   mostrarRegistro,
-  mostrarMiPerfil,
   mostrarPanel,
   mostrarClientes,
   mostrarProfesionales,
   mostrarTurnos,
+  mostrarClases,
+  mostrarPerfilCliente,
+  mostrarHorariosDocente,
+  mostrarSalas,
   mostrarUsuarios,
   mostrarAuditoria,
 };

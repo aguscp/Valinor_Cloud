@@ -3,8 +3,9 @@ const esApi = (req) => req.originalUrl.startsWith("/api");
 const notFound = (req, res) => {
   if (esApi(req)) return res.status(404).json({ error: "Ruta inexistente" });
   res.status(404).render("error", {
+    codigo: 404,
     titulo: "Página no encontrada",
-    mensaje: "La página que buscás no existe.",
+    mensaje: "La página que buscás no existe o cambió de dirección. Revisá que la URL esté bien escrita o volvé al inicio.",
   });
 };
 
@@ -22,6 +23,10 @@ const traducirError = (err) => {
     const campo = Object.keys(err.keyValue || {})[0] || "dato";
     return { status: 409, mensaje: `Ya existe un registro con ese ${campo}` };
   }
+  // Errores de negocio creados con crearError(): su mensaje es apto para mostrarse al usuario.
+  if (err.expuesto && err.status >= 400 && err.status < 600) {
+    return { status: err.status, mensaje: err.message };
+  }
   if (err.status >= 400 && err.status < 500) {
     return { status: err.status, mensaje: "La solicitud no es válida" };
   }
@@ -33,7 +38,7 @@ const errorHandler = (err, req, res, next) => {
   if (status === 500) console.error("Error no controlado:", err);
 
   if (esApi(req)) return res.status(status).json({ error: mensaje });
-  res.status(status).render("error", { titulo: "Ocurrió un error", mensaje });
+  res.status(status).render("error", { codigo: status, titulo: "Ocurrió un error", mensaje });
 };
 
 module.exports = { notFound, errorHandler };

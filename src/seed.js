@@ -4,17 +4,14 @@ const mongoose = require("mongoose");
 const conectarDB = require("./config/db");
 const Cliente = require("./models/Cliente");
 const Profesional = require("./models/Profesional");
-const Turno = require("./models/Turno");
+const Sala = require("./models/Sala");
+const ConfiguracionClase = require("./models/ConfiguracionClase");
+const HorarioClase = require("./models/HorarioClase");
+const ClaseProgramada = require("./models/ClaseProgramada");
+const ReservaClase = require("./models/ReservaClase");
 const Usuario = require("./models/Usuario");
 const Auditoria = require("./models/Auditoria");
-
-const fechaRelativa = (dias) => {
-  const fecha = new Date();
-  fecha.setDate(fecha.getDate() + dias);
-  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
-  const dia = String(fecha.getDate()).padStart(2, "0");
-  return `${fecha.getFullYear()}-${mes}-${dia}`;
-};
+const Chat = require("./models/Chat");
 
 const CLIENTES = [
   { nombre: "Juan", apellido: "Pérez", dni: "28456789", telefono: "1145678901", email: "juan.perez@example.com" },
@@ -33,38 +30,32 @@ const PROFESIONALES = [
   { nombre: "Valeria", apellido: "Quiroga", especialidad: "Masajes descontracturantes", matricula: "MAS-3310" },
 ];
 
-const TURNOS = [
-  { cliente: 0, profesional: 0, dias: -20, hora: "14:00", estado: "atendido" },
-  { cliente: 0, profesional: 0, dias: -20, hora: "15:00", estado: "cancelado" },
-  { cliente: 5, profesional: 1, dias: -9, hora: "17:00", estado: "atendido" },
-  { cliente: 3, profesional: 0, dias: -14, hora: "11:00", estado: "atendido" },
-  { cliente: 6, profesional: 1, dias: -1, hora: "17:30", estado: "cancelado" },
-  { cliente: 2, profesional: 0, dias: 0, hora: "09:00", estado: "atendido" },
-  { cliente: 0, profesional: 0, dias: 0, hora: "10:00", estado: "reservado" },
-  { cliente: 1, profesional: 0, dias: 0, hora: "11:30", estado: "reservado" },
-  { cliente: 5, profesional: 1, dias: 0, hora: "12:00", estado: "reservado" },
-  { cliente: 7, profesional: 2, dias: 0, hora: "16:00", estado: "cancelado" },
-  { cliente: 4, profesional: 0, dias: 1, hora: "10:00", estado: "reservado" },
-  { cliente: 3, profesional: 1, dias: 2, hora: "13:00", estado: "reservado" },
-  { cliente: 6, profesional: 2, dias: 3, hora: "18:00", estado: "reservado" },
-];
-
 const sembrar = async () => {
   await conectarDB();
 
   await Promise.all([
     Cliente.deleteMany({}),
     Profesional.deleteMany({}),
-    Turno.deleteMany({}),
+    ReservaClase.deleteMany({}),
+    ClaseProgramada.deleteMany({}),
+    HorarioClase.deleteMany({}),
+    Sala.deleteMany({}),
+    ConfiguracionClase.deleteMany({}),
     Usuario.deleteMany({}),
     Auditoria.deleteMany({}),
+    Chat.deleteMany({}),
   ]);
-  await Promise.all([Cliente.syncIndexes(), Profesional.syncIndexes(), Usuario.syncIndexes()]);
+  await Promise.all([
+    Cliente.syncIndexes(),
+    Profesional.syncIndexes(),
+    Usuario.syncIndexes(),
+    Chat.syncIndexes(),
+  ]);
 
   const clientes = await Cliente.insertMany(CLIENTES);
   const profesionales = await Profesional.insertMany(PROFESIONALES);
 
-  const admin = await Usuario.create({
+  await Usuario.create({
     usuario: "admin",
     password: "admin123",
     nombre: "Administrador",
@@ -72,6 +63,8 @@ const sembrar = async () => {
   });
 
   await Usuario.create([
+    // Segundo admin para probar la asignación y reasignación de chats entre operadores.
+    { usuario: "admin2", password: "admin123", nombre: "Administradora 2", rol: "admin" },
     { usuario: "recepcion", password: "recepcion123", nombre: "Recepcionista", rol: "recepcion" },
     {
       usuario: "profesional1",
@@ -89,20 +82,9 @@ const sembrar = async () => {
     },
   ]);
 
-  await Turno.insertMany(
-    TURNOS.map((turno) => ({
-      cliente: clientes[turno.cliente]._id,
-      profesional: profesionales[turno.profesional]._id,
-      fecha: fechaRelativa(turno.dias),
-      hora: turno.hora,
-      estado: turno.estado,
-      creadoPor: admin._id,
-    }))
-  );
-
   console.log(
     `Datos cargados: ${clientes.length} clientes, ${profesionales.length} profesionales, ` +
-      `${TURNOS.length} turnos y 4 usuarios.`
+      `5 usuarios.`
   );
 };
 

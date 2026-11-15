@@ -1,11 +1,10 @@
 const Cliente = require("../models/Cliente");
-const Turno = require("../models/Turno");
+const ReservaClase = require("../models/ReservaClase");
 const Usuario = require("../models/Usuario");
 const { tomarCampos, describirCambios } = require("../helpers/campos");
 const { registrarAuditoria } = require("../helpers/auditoria");
 
 const CAMPOS = ["nombre", "apellido", "dni", "telefono", "email"];
-const CAMPOS_AUTOSERVICIO = ["nombre", "apellido", "telefono", "email"];
 
 const obtenerClientes = async (req, res) => {
   const clientes = await Cliente.find().sort({ apellido: 1, nombre: 1 });
@@ -15,55 +14,6 @@ const obtenerClientes = async (req, res) => {
 const obtenerClientePorId = async (req, res) => {
   const cliente = await Cliente.findById(req.params.id);
   if (!cliente) return res.status(404).json({ error: "Cliente no encontrado" });
-  res.json(cliente);
-};
-
-const obtenerMiPerfil = async (req, res) => {
-  const cliente = await Cliente.findById(req.usuario.cliente);
-  if (!cliente) return res.status(404).json({ error: "No se encontró tu ficha de cliente" });
-  res.json(cliente);
-};
-
-const actualizarMiPerfil = async (req, res) => {
-  const cliente = await Cliente.findById(req.usuario.cliente);
-  if (!cliente) return res.status(404).json({ error: "No se encontró tu ficha de cliente" });
-
-  const datos = tomarCampos(req.body, CAMPOS_AUTOSERVICIO);
-  const camposModificados = Object.entries(datos).filter(([campo, valor]) => {
-    const actual = cliente[campo] ?? "";
-    const nuevo = typeof valor === "string" ? valor.trim() : valor ?? "";
-    return campo === "email"
-      ? String(actual).toLowerCase() !== String(nuevo).toLowerCase()
-      : actual !== nuevo;
-  });
-
-  if (!camposModificados.length) return res.json(cliente);
-
-  cliente.set(
-    Object.fromEntries(
-      camposModificados.map(([campo, valor]) => [
-        campo,
-        typeof valor === "string" ? valor.trim() : valor,
-      ])
-    )
-  );
-  const cambios = camposModificados.map(([campo]) => campo).join(", ");
-  await cliente.save();
-  const nombreCompleto = `${cliente.nombre} ${cliente.apellido}`;
-  if (req.usuario.nombre !== nombreCompleto) {
-    await Usuario.updateOne(
-      { _id: req.usuario._id },
-      { nombre: nombreCompleto },
-      { timestamps: false }
-    );
-    req.usuario.nombre = nombreCompleto;
-  }
-
-  await registrarAuditoria(req, "MODIFICAR", {
-    entidad: "Cliente",
-    entidadId: cliente._id,
-    detalle: `Autoservicio - campos: ${cambios}`,
-  });
   res.json(cliente);
 };
 
@@ -97,13 +47,17 @@ const eliminarCliente = async (req, res) => {
   const cliente = await Cliente.findById(req.params.id);
   if (!cliente) return res.status(404).json({ error: "Cliente no encontrado" });
 
-  if (await Usuario.exists({ cliente: cliente._id })) {
-    return res.status(409).json({ error: "No se puede eliminar: el cliente tiene un usuario vinculado" });
+  const tieneReservasActivas = await ReservaClase.exists({
+    cliente: cliente._id,
+    estado: "reservada",
+  });
+  if (tieneReservasActivas) {
+    return res.status(409).json({ error: "No se puede eliminar: el cliente tiene reservas activas" });
   }
 
-  const tieneTurnosReservados = await Turno.exists({ cliente: cliente._id, estado: "reservado" });
-  if (tieneTurnosReservados) {
-    return res.status(409).json({ error: "No se puede eliminar: el cliente tiene turnos reservados" });
+  const tieneUsuario = await Usuario.exists({ cliente: cliente._id });
+  if (tieneUsuario) {
+    return res.status(409).json({ error: "No se puede eliminar: el cliente tiene un usuario vinculado" });
   }
 
   await cliente.deleteOne();
@@ -118,8 +72,6 @@ const eliminarCliente = async (req, res) => {
 module.exports = {
   obtenerClientes,
   obtenerClientePorId,
-  obtenerMiPerfil,
-  actualizarMiPerfil,
   crearCliente,
   actualizarCliente,
   eliminarCliente,

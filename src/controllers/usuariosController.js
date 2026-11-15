@@ -3,17 +3,11 @@ const Profesional = require("../models/Profesional");
 const Cliente = require("../models/Cliente");
 const { tomarCampos, describirCambios } = require("../helpers/campos");
 const { registrarAuditoria } = require("../helpers/auditoria");
+const { firmarToken, enviarTokenEnCookie } = require("../helpers/token");
+const { desconectarUsuario } = require("../socket/emisor");
+const { liberarChatsDeAdmin } = require("../services/chatService");
 
-const CAMPOS = [
-  "usuario",
-  "password",
-  "nombre",
-  "rol",
-  "profesional",
-  "cliente",
-  "activo",
-  "expiraEl",
-];
+const CAMPOS = ["usuario", "password", "nombre", "rol", "profesional", "cliente", "activo", "expiraEl"];
 
 const normalizar = (datos, rolFinal) => {
   if (datos.profesional === "") datos.profesional = null;
@@ -31,17 +25,15 @@ const validarProfesional = async (idProfesional) => {
   return Profesional.exists({ _id: idProfesional });
 };
 
-const validarCliente = async (idCliente, excluirUsuario) => {
+const validarCliente = async (idCliente) => {
   if (!idCliente) return true;
-  const filtro = { cliente: idCliente };
-  if (excluirUsuario) filtro._id = { $ne: excluirUsuario };
-  return (await Cliente.exists({ _id: idCliente })) && !(await Usuario.exists(filtro));
+  return Cliente.exists({ _id: idCliente });
 };
 
 const obtenerUsuarios = async (req, res) => {
   const usuarios = await Usuario.find()
     .populate("profesional", "nombre apellido")
-    .populate("cliente", "nombre apellido")
+    .populate("cliente", "nombre apellido dni")
     .sort({ createdAt: 1 });
   res.json(usuarios);
 };
@@ -53,8 +45,11 @@ const crearUsuario = async (req, res) => {
   if (!(await validarProfesional(datos.profesional))) {
     return res.status(400).json({ error: "El profesional seleccionado no existe" });
   }
+  if (datos.rol === "cliente" && !datos.cliente) {
+    return res.status(400).json({ error: "Seleccioná un cliente para vincular" });
+  }
   if (!(await validarCliente(datos.cliente))) {
-    return res.status(400).json({ error: "El cliente no existe o ya tiene una cuenta" });
+    return res.status(400).json({ error: "El cliente seleccionado no existe" });
   }
 
   const usuario = await Usuario.create(datos);
@@ -85,13 +80,28 @@ const actualizarUsuario = async (req, res) => {
   if (!(await validarProfesional(datos.profesional))) {
     return res.status(400).json({ error: "El profesional seleccionado no existe" });
   }
-  if (!(await validarCliente(datos.cliente, usuario._id))) {
-    return res.status(400).json({ error: "El cliente no existe o ya tiene una cuenta" });
+  if ((datos.rol || usuario.rol) === "cliente" && !datos.cliente && !usuario.cliente) {
+    return res.status(400).json({ error: "Seleccioná un cliente para vincular" });
+  }
+  if (!(await validarCliente(datos.cliente))) {
+    return res.status(400).json({ error: "El cliente seleccionado no existe" });
   }
 
+  const eraAdmin = usuario.rol === "admin";
   usuario.set(datos);
   const cambios = describirCambios(usuario);
   await usuario.save();
+
+  // Los sockets del chat se autenticaron con los datos anteriores: se cierran para que
+  // se reconecten (o sean rechazados) con el estado nuevo. El propio admin no cambia de permisos.
+  if (!esElMismo && (seQuitaPermisos || datos.password)) desconectarUsuario(usuario._id);
+  if (eraAdmin && !(usuario.rol === "admin" && usuario.estaHabilitado())) {
+    await liberarChatsDeAdmin(usuario._id);
+  }
+
+  // Cambiar la contraseña invalida los tokens anteriores (tokenVersion); si es la
+  // propia, se emite uno nuevo para no cerrarle la sesión al admin.
+  if (esElMismo && datos.password) enviarTokenEnCookie(res, firmarToken(usuario));
 
   await registrarAuditoria(req, "MODIFICAR", {
     entidad: "Usuario",
@@ -100,7 +110,7 @@ const actualizarUsuario = async (req, res) => {
   });
   await usuario.populate([
     { path: "profesional", select: "nombre apellido" },
-    { path: "cliente", select: "nombre apellido" },
+    { path: "cliente", select: "nombre apellido dni" },
   ]);
   res.json(usuario);
 };
@@ -114,6 +124,8 @@ const eliminarUsuario = async (req, res) => {
   }
 
   await usuario.deleteOne();
+  desconectarUsuario(usuario._id);
+  if (usuario.rol === "admin") await liberarChatsDeAdmin(usuario._id);
   await registrarAuditoria(req, "ELIMINAR", {
     entidad: "Usuario",
     entidadId: usuario._id,
