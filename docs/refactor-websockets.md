@@ -462,6 +462,8 @@ Variables nuevas (opcionales) en `.env`:
 ```dotenv
 CHAT_MAX_POR_ADMIN=3        # chats abiertos (pendientes + activos) por admin
 CHAT_TIMEOUT_MINUTOS=5      # acepta decimales: 0.5 = 30 segundos, útil para probar
+GEMINI_API_KEY=             # opcional; habilita consultas @gemini en un chat activo
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
 ## 10. Verificación

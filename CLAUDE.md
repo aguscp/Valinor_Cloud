@@ -10,7 +10,7 @@ TurnoFlex: aplicación web de gestión de clases grupales y reservas (Node.js 18
 
 ```bash
 npm install
-cp .env.example .env     # variables: PORT, MONGO_URI, JWT_SECRET, JWT_MINUTOS, CHAT_MAX_POR_ADMIN, CHAT_TIMEOUT_MINUTOS
+cp .env.example .env     # variables: PORT, MONGO_URI, JWT_SECRET, JWT_MINUTOS, CHAT_MAX_POR_ADMIN, CHAT_TIMEOUT_MINUTOS, GEMINI_API_KEY, GEMINI_MODEL
 npm run seed             # BORRA la base y crea datos y usuarios de prueba (admin/admin123, admin2/admin123, etc.)
 npm run dev              # nodemon src/index.js
 npm start                # node src/index.js
@@ -73,6 +73,7 @@ Detalle completo en `docs/refactor-websockets.md`.
 - Cada transición es un `findOneAndUpdate` con el estado de origen en el filtro (si pierde la carrera → 409 vía `errorDeTransicion`). La elección de admin y la creación/reasignación corren dentro del mutex `encolar()`.
 - Asignación a **un** admin conectado con carga (pendientes + activos, contada en Mongo) menor a `CHAT_MAX_POR_ADMIN` (por defecto 3): el de menor carga, con desempate al azar. Si no hay → 503 "Todos los operadores se encuentran ocupados en este momento" y auditoría `CHAT_SIN_OPERADOR`.
 - Solo se envían mensajes en `activo` (1 a 1000 caracteres). Solo el admin asignado acepta, rechaza o finaliza.
+- En una conversación activa, `@gemini pregunta` solicita una respuesta del asistente. `GEMINI_API_KEY` es opcional; sin clave, el chat muestra un mensaje indicando que Gemini no pudo responder.
 - Timeout de `CHAT_TIMEOUT_MINUTOS` (por defecto 5) en `pendiente`, controlado por el servidor. `recuperarTimeouts()` lo reprograma al arrancar.
 - Las acciones del servidor (timeout, reasignación) se auditan con `usuarioNombre: "sistema"`.
 

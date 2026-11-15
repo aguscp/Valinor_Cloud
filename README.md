@@ -11,7 +11,8 @@ turnos de un centro de atención. Permite administrar profesionales, clientes y 
 - **Auditoría** de todas las acciones relevantes.
 - **Front con `fetch`**: las pantallas cargan y guardan datos de forma asincrónica, sin recargar la página.
 - **Interfaz con Tailwind CSS 4** (por CDN, sin paso de build): navbar y sidebar colapsable, menú de usuario, colores por estado de turno y diseño responsive para móviles, tablets, portátiles y escritorio.
-- **Chat de consultas en tiempo real con WebSockets (Socket.io)**: recepción y profesionales le consultan a un administrador desde un panel lateral. Cada consulta pasa por los estados pendiente, activo, finalizado o rechazado, y vence a los 5 minutos si nadie la acepta.
+- **Chat de consultas en tiempo real con WebSockets (Socket.io)**: clientes, recepción y profesionales consultan a un administrador desde un panel lateral. Cada consulta pasa por los estados pendiente, activo, finalizado o rechazado, y vence a los 5 minutos si nadie la acepta.
+- **Asistente Gemini opcional**: en una conversación activa, escribí `@gemini` seguido de una pregunta para recibir una respuesta de ayuda. Configurá `GEMINI_API_KEY` para habilitarlo.
 
 ---
 
@@ -57,6 +58,8 @@ La guía completa está en [`docs/Docker/docker-readme.md`](docs/Docker/docker-r
 | `JWT_MINUTOS` | Vida del token en minutos. En el navegador se renueva mientras se usa la app | `30` |
 | `CHAT_MAX_POR_ADMIN` | Máximo de chats abiertos (pendientes + activos) que puede tener cada admin | `3` |
 | `CHAT_TIMEOUT_MINUTOS` | Minutos que espera una consulta a ser aceptada antes de vencer. Acepta decimales (`0.5` = 30 s) para probar | `5` |
+| `GEMINI_API_KEY` | Clave de API para habilitar el asistente Gemini | Sin configurar (deshabilitado) |
+| `GEMINI_MODEL` | Modelo de Gemini a utilizar | `gemini-3.5-flash-lite` |
 
 ### Usuarios de prueba (creados por `npm run seed`)
 

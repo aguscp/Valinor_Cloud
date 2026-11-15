@@ -9,7 +9,8 @@ const MAX_TEXTO = 1000;
 
 const mensajeSchema = new mongoose.Schema(
   {
-    autor: { type: mongoose.Schema.Types.ObjectId, ref: "Usuario", required: true },
+    autor: { type: mongoose.Schema.Types.ObjectId, ref: "Usuario", default: null },
+    esIA: { type: Boolean, default: false },
     texto: {
       type: String,
       trim: true,
