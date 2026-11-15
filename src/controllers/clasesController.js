@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Cliente = require("../models/Cliente");
+const Profesional = require("../models/Profesional");
 const Sala = require("../models/Sala");
 const ConfiguracionClase = require("../models/ConfiguracionClase");
 const HorarioClase = require("../models/HorarioClase");
@@ -11,13 +12,15 @@ const { crearError } = require("../helpers/errores");
 const {
   encolarCambio,
   sumarMinutos,
+  primeraFechaDeOcurrencia,
+  hayOcurrenciaEnComun,
+  incluyeOcurrencia,
   validarHorario,
   refrescarClasesFuturas,
   obtenerClasesDisponibles,
 } = require("../services/clasesService");
 
 const esProfesor = (usuario) => usuario.rol === "profesional";
-const idProfesionalDe = (usuario) => (esProfesor(usuario) ? usuario.profesional : null);
 const horaActualEnArgentina = () =>
   Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", {
@@ -36,6 +39,15 @@ const fechaActualEnArgentina = () => {
   const ahora = horaActualEnArgentina();
   return `${ahora.year}-${ahora.month}-${ahora.day}`;
 };
+const fechaHoraActualEnArgentina = () => {
+  const ahora = horaActualEnArgentina();
+  return `${ahora.year}-${ahora.month}-${ahora.day}T${ahora.hour}:${ahora.minute}`;
+};
+const fechaEsValida = (fecha) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  const parseada = new Date(`${fecha}T00:00:00Z`);
+  return !Number.isNaN(parseada.getTime()) && parseada.toISOString().slice(0, 10) === fecha;
+};
 
 const obtenerConfiguracion = async (req, res) => {
   const configuracion = await ConfiguracionClase.findOne({ clave: "general" });
@@ -51,25 +63,19 @@ const actualizarConfiguracion = async (req, res) =>
     }
 
     const horarios = await HorarioClase.find({ activo: true });
-    const porDia = new Map();
-    horarios.forEach((horario) => {
-      if (!porDia.has(horario.diaSemana)) porDia.set(horario.diaSemana, []);
-      porDia.get(horario.diaSemana).push(horario);
-    });
-    for (const delDia of porDia.values()) {
-      for (let i = 0; i < delDia.length; i += 1) {
-        const inicioA = delDia[i].horaInicio;
-        const finA = sumarMinutos(inicioA, duracion);
-        for (let j = i + 1; j < delDia.length; j += 1) {
-          const mismoProfesor = String(delDia[i].profesional) === String(delDia[j].profesional);
-          const mismaSala = String(delDia[i].sala) === String(delDia[j].sala);
-          const inicioB = delDia[j].horaInicio;
-          const finB = sumarMinutos(inicioB, duracion);
-          if (inicioA < finB && inicioB < finA && (mismoProfesor || mismaSala)) {
-            return res.status(409).json({
-              error: "La duración configurada genera superposiciones entre horarios existentes",
-            });
-          }
+    for (let i = 0; i < horarios.length; i += 1) {
+      const inicioA = horarios[i].horaInicio;
+      const finA = sumarMinutos(inicioA, duracion);
+      for (let j = i + 1; j < horarios.length; j += 1) {
+        if (!hayOcurrenciaEnComun(horarios[i], horarios[j])) continue;
+        const mismoProfesor = String(horarios[i].profesional) === String(horarios[j].profesional);
+        const mismaSala = String(horarios[i].sala) === String(horarios[j].sala);
+        const inicioB = horarios[j].horaInicio;
+        const finB = sumarMinutos(inicioB, duracion);
+        if (inicioA < finB && inicioB < finA && (mismoProfesor || mismaSala)) {
+          return res.status(409).json({
+            error: "La duración configurada genera superposiciones entre horarios existentes",
+          });
         }
       }
     }
@@ -80,10 +86,9 @@ const actualizarConfiguracion = async (req, res) =>
       activa: true,
     });
     for (const clase of clasesConReservas) {
-      const diaSemana = new Date(`${clase.fecha}T12:00:00Z`).getUTCDay();
       for (const horario of horarios) {
         if (
-          horario.diaSemana !== diaSemana ||
+          !incluyeOcurrencia(horario, clase.fecha) ||
           String(horario._id) === String(clase.horario)
         ) {
           continue;
@@ -176,7 +181,7 @@ const obtenerHorarios = async (req, res) => {
   const horarios = await HorarioClase.find(filtro)
     .populate("profesional", "nombre apellido")
     .populate("sala", "nombre capacidad activa")
-    .sort({ diaSemana: 1, horaInicio: 1 });
+    .sort({ comienzaDesde: 1, horaInicio: 1 });
   const configuracion = await ConfiguracionClase.findOne({ clave: "general" });
   res.json({
     duracionMinutos: configuracion ? configuracion.duracionMinutos : 60,
@@ -185,21 +190,41 @@ const obtenerHorarios = async (req, res) => {
 };
 
 const obtenerSalasDisponibles = async (req, res) => {
-  const diaSemana = Number(req.query.diaSemana);
   const horaInicio = String(req.query.horaInicio || "");
-  const profesional = idProfesionalDe(req.usuario);
-  if (!Number.isInteger(diaSemana) || diaSemana < 0 || diaSemana > 6 || !profesional) {
-    return res.status(400).json({ error: "Seleccioná un día y un horario válidos" });
+  const comienzaDesde = String(req.query.comienzaDesde || "");
+  const repetirSemanas = Number(req.query.repetirSemanas);
+  const profesional = esProfesor(req.usuario)
+    ? req.usuario.profesional
+    : req.usuario.rol === "admin"
+      ? req.query.profesional
+      : null;
+  if (!profesional || !mongoose.isValidObjectId(profesional)) {
+    return res.status(400).json({ error: "El profesional vinculado no es válido" });
+  }
+  if (!(await Profesional.exists({ _id: profesional }))) {
+    return res.status(400).json({ error: "El profesor seleccionado no existe" });
   }
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(horaInicio)) {
     return res.status(400).json({ error: "Seleccioná un horario válido" });
+  }
+  if (!fechaEsValida(comienzaDesde)) {
+    return res.status(400).json({ error: "Seleccioná una fecha de inicio válida" });
+  }
+  if (!Number.isInteger(repetirSemanas) || repetirSemanas < 1 || repetirSemanas > 8) {
+    return res.status(400).json({ error: "La repetición debe ser de 1 a 8 semanas" });
   }
   const salas = await Sala.find({ activa: true }).sort({ nombre: 1 });
   const disponibles = [];
   for (const sala of salas) {
     try {
       await validarHorario({
-        horario: { profesional, diaSemana, horaInicio, sala: sala._id },
+        horario: {
+          profesional,
+          horaInicio,
+          sala: sala._id,
+          comienzaDesde,
+          repetirSemanas,
+        },
         excluirId: req.query.excluirId,
       });
       disponibles.push(sala);
@@ -212,18 +237,42 @@ const obtenerSalasDisponibles = async (req, res) => {
 
 const crearHorario = async (req, res) =>
   encolarCambio(async () => {
+    const campos = tomarCampos(req.body, [
+      "tipo",
+      "horaInicio",
+      "sala",
+      "comienzaDesde",
+      "repetirSemanas",
+      ...(req.usuario.rol === "admin" ? ["profesional"] : []),
+    ]);
+    campos.repetirSemanas = Number(campos.repetirSemanas);
+    const profesional = esProfesor(req.usuario) ? req.usuario.profesional : campos.profesional;
+    if (!profesional) {
+      return res.status(400).json({ error: "Seleccioná un profesor para el horario" });
+    }
     const horario = new HorarioClase({
-      ...tomarCampos(req.body, ["tipo", "diaSemana", "horaInicio", "sala"]),
-      profesional: req.usuario.profesional,
-      diaSemana: Number(req.body.diaSemana),
+      ...campos,
+      profesional,
     });
     await horario.validate();
+    if (horario.comienzaDesde < fechaActualEnArgentina()) {
+      return res.status(400).json({ error: "La fecha de inicio no puede estar en el pasado" });
+    }
+    if (
+      `${primeraFechaDeOcurrencia(horario)}T${horario.horaInicio}` <=
+      fechaHoraActualEnArgentina()
+    ) {
+      return res.status(400).json({
+        error: "La primera clase ya pasó para la fecha elegida; seleccioná otra fecha de inicio",
+      });
+    }
     await validarHorario({ horario });
     await horario.save();
+    const profesorAsignado = await Profesional.findById(horario.profesional);
     await registrarAuditoria(req, "CREAR", {
       entidad: "HorarioClase",
       entidadId: horario._id,
-      detalle: `${horario.tipo}, día ${horario.diaSemana}, ${horario.horaInicio}`,
+      detalle: `${horario.tipo}, profesor ${profesorAsignado.nombre} ${profesorAsignado.apellido}, desde ${horario.comienzaDesde}, ${horario.horaInicio}`,
     });
     res.status(201).json(horario);
   });
@@ -235,17 +284,48 @@ const actualizarHorario = async (req, res) =>
       ...(esProfesor(req.usuario) ? { profesional: req.usuario.profesional } : {}),
     });
     if (!horario) return res.status(404).json({ error: "Horario no encontrado" });
-    horario.set(tomarCampos(req.body, ["tipo", "diaSemana", "horaInicio", "sala", "activo"]));
-    if (req.body.diaSemana !== undefined) horario.diaSemana = Number(req.body.diaSemana);
+    const comienzoAnterior = horario.comienzaDesde;
+    const campos = tomarCampos(req.body, [
+      "tipo",
+      "horaInicio",
+      "sala",
+      "comienzaDesde",
+      "repetirSemanas",
+      "activo",
+      ...(req.usuario.rol === "admin" ? ["profesional"] : []),
+    ]);
+    if (campos.repetirSemanas !== undefined) campos.repetirSemanas = Number(campos.repetirSemanas);
+    horario.set(campos);
     if (req.body.activo !== undefined) horario.activo = req.body.activo === true || req.body.activo === "true";
     await horario.validate();
+    if (!(await Profesional.exists({ _id: horario.profesional }))) {
+      return res.status(400).json({ error: "El profesor seleccionado no existe" });
+    }
+    if (
+      campos.comienzaDesde !== undefined &&
+      campos.comienzaDesde !== comienzoAnterior &&
+      horario.comienzaDesde < fechaActualEnArgentina()
+    ) {
+      return res.status(400).json({ error: "La fecha de inicio no puede estar en el pasado" });
+    }
+    if (
+      campos.comienzaDesde !== undefined &&
+      campos.comienzaDesde !== comienzoAnterior &&
+      `${primeraFechaDeOcurrencia(horario)}T${horario.horaInicio}` <=
+        fechaHoraActualEnArgentina()
+    ) {
+      return res.status(400).json({
+        error: "La primera clase ya pasó para la fecha elegida; seleccioná otra fecha de inicio",
+      });
+    }
     if (horario.activo) await validarHorario({ horario, excluirId: horario._id });
     await horario.save();
     await refrescarClasesFuturas(horario._id);
+    const profesorAsignado = await Profesional.findById(horario.profesional);
     await registrarAuditoria(req, "MODIFICAR", {
       entidad: "HorarioClase",
       entidadId: horario._id,
-      detalle: `${horario.tipo}, día ${horario.diaSemana}, ${horario.horaInicio}`,
+      detalle: `${horario.tipo}, profesor ${profesorAsignado.nombre} ${profesorAsignado.apellido}, desde ${horario.comienzaDesde}, ${horario.horaInicio}`,
     });
     res.json(horario);
   });
@@ -263,13 +343,14 @@ const eliminarHorario = async (req, res) =>
     await registrarAuditoria(req, "ELIMINAR", {
       entidad: "HorarioClase",
       entidadId: horario._id,
-      detalle: `${horario.tipo}, día ${horario.diaSemana}, ${horario.horaInicio}`,
+      detalle: `${horario.tipo}, desde ${horario.comienzaDesde}, ${horario.horaInicio}`,
     });
     res.status(204).end();
   });
 
 const obtenerClasesDisponiblesCliente = async (req, res) => {
   const clases = await obtenerClasesDisponibles();
+  if (req.usuario.rol !== "cliente") return res.json(clases);
   const reservas = await ReservaClase.find({
     cliente: req.usuario.cliente,
     estado: "reservada",

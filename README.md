@@ -76,11 +76,8 @@ La guía completa está en [`docs/Docker/docker-readme.md`](docs/Docker/docker-r
 Valinor_Cloud/
 ├── .env.example
 ├── docs/
-│   ├── TurnoFlex.postman_collection.json
-│   ├── refactor-passport-jwt.md         Detalle del paso de express-session a Passport + JWT
-│   ├── refactor-frontend.md             Detalle del rediseño del frontend con Tailwind 4
-│   ├── refactor-websockets.md           Detalle del chat en tiempo real con Socket.io
-│   └── Docker/docker-readme.md          Guía para levantar el proyecto con Docker
+│   ├── GUIA_DE_PRUEBAS.md               Paso a paso para probar la aplicación
+│   └── TurnoFlex.postman_collection.json
 └── src/
     ├── index.js                         Configura Express, cookies, Passport, rutas, errores y Socket.io; conecta a Mongo
     ├── seed.js                          Carga datos y usuarios de prueba
@@ -163,7 +160,7 @@ Todos los modelos usan `timestamps`, así que guardan `createdAt` (fecha de crea
 | `usuarios` | usuario, password (hash bcrypt), nombre, rol, profesional (ref), cliente (ref), activo, expiraEl, ultimoAcceso, tokenVersion | usuario único, contraseña de 6 caracteres o más, rol válido, profesional obligatorio si el rol es profesional y cliente obligatorio si el rol es cliente |
 | `chats` | solicitante (ref), rolSolicitante, admin (ref), estado, motivoCierre, expiraEl, aceptadoEl, cerradoEl, mensajes [autor, texto, createdAt] | estado en `pendiente / activo / finalizado / rechazado`, mensajes de 1 a 1000 caracteres, un solo chat abierto por usuario (índice único parcial) |
 | `salas` | nombre, capacidad, activa | capacidad entera positiva |
-| `horarioclases` | profesional (ref), tipo, diaSemana, horaInicio, sala (ref), activo | horario semanal; sin superposición de sala o profesor |
+| `horarioclases` | profesional (ref), tipo, horaInicio, comienzaDesde, repetirSemanas, sala (ref), activo | la fecha de inicio es la primera clase y determina el día semanal; repite de 1 a 8 ocurrencias, sin superposición de sala o profesor |
 | `claseprogramadas` | horario, fecha, tipo, profesional, sala, horaInicio, horaFin, capacidad, reservas, activa | ocurrencias generadas para las próximas 8 semanas; cupo atómico |
 | `reservaclases` | clase (ref), cliente (ref), estado | historial de reservas; una sola reserva activa por cliente y clase |
 | `configuracionclases` | clave, duracionMinutos | una duración general configurable por admin (por defecto 60 minutos) |
@@ -173,9 +170,9 @@ Todos los modelos usan `timestamps`, así que guardan `createdAt` (fecha de crea
 
 - El registro público crea un cliente y una cuenta vinculada con rol `cliente`; el cliente puede consultar su historial y reservar clases grupales futuras.
 - El cliente puede modificar nombre, apellido, teléfono y email desde su perfil; el DNI no se modifica.
-- Cada profesor define el tipo de clase como texto, día y hora semanal, y elige una sala libre. Admin administra salas, capacidad y duración general.
+- Cada profesor define el tipo, la fecha de la primera clase, la hora, la repetición de 1 a 8 semanas y una sala libre. La fecha determina el día semanal; los profesores también pueden consultar la vista semanal de clases sin reservar.
 - Admin debe cargar al menos una sala antes de que los profesores puedan publicar horarios.
-- Las clases se generan para las próximas 8 semanas. Las completas se muestran deshabilitadas; hay una reserva por cliente y clase, con control atómico del cupo. Un cliente no puede reservar clases superpuestas.
+- Se generan tantas clases semanales como indique el profesor (de 1 a 8), desde la fecha elegida. Las ocurrencias se muestran cuando entran en la ventana de las próximas 8 semanas. Las completas se muestran deshabilitadas; hay una reserva por cliente y clase, con control atómico del cupo. Un cliente no puede reservar clases superpuestas.
 - Recepción y admin pueden asignar una clase existente a un cliente desde Gestión de turnos; se validan cupo, duplicados y superposiciones igual que en una reserva del cliente.
 - Las reservas ya hechas conservan el horario y cupo que tenían si el profesor edita o desactiva su horario; el cambio rige para ocurrencias futuras sin reservas.
 - El cliente puede cancelar antes del inicio de la clase. La reserva queda en el historial y libera el cupo; puede volver a reservar esa clase si hay lugar y se conserva cada cancelación.
@@ -289,11 +286,11 @@ La colección de Postman (`docs/TurnoFlex.postman_collection.json`) guarda el to
 | POST | `/api/auth/logout` | token | Invalida los tokens del usuario y borra la cookie |
 | GET | `/api/auth/yo` | token | Usuario actual y sus permisos |
 | GET/PUT | `/api/auth/yo/perfil` | cuenta cliente | Consultar/actualizar el propio perfil. Solo acepta nombre, apellido, teléfono y email; el DNI no se modifica |
-| GET | `/api/clases/disponibles` | clases:read | Clases futuras (8 semanas), con cupo y marca si ya reservaste |
+| GET | `/api/clases/disponibles` | clases:read | Clases futuras (8 semanas), con cupo; marca las reservas propias del cliente y permite consulta semanal al profesor |
 | POST | `/api/clases/:id/reservas` | clases:reservar | Reservar un lugar. El servidor comprueba cupo, fecha y superposiciones |
 | GET | `/api/clases/para-reservar` | turnos:create | Clases futuras para asignar a un cliente desde Gestión de turnos |
 | POST | `/api/clases/:id/reservas-para-cliente` | turnos:create | Reservar `{ cliente }` en una clase existente |
-| GET | `/api/clases/mis-reservas` | clases:read | Historial de reservas del cliente |
+| GET | `/api/clases/mis-reservas` | clases:reservar | Historial de reservas del cliente |
 | GET | `/api/clases/reservas?estado=&fecha=` | turnos:read | Listar reservas (por contexto: cliente, profesor o personal) |
 | PATCH | `/api/clases/reservas/:id/cancelar` | clases:cancelar | El cliente cancela su reserva antes del inicio; conserva el historial y libera el cupo |
 | PATCH | `/api/clases/reservas/:id/cancelar-personal` | turnos:update | Recepción/admin cancela una reserva |
@@ -301,8 +298,8 @@ La colección de Postman (`docs/TurnoFlex.postman_collection.json`) guarda el to
 | DELETE | `/api/clases/reservas/:id` | turnos:delete | Eliminar una reserva cancelada |
 | GET/POST/PUT | `/api/salas[/:id]` | salas:manage | Listar, crear y editar salas/capacidad/estado |
 | GET/PUT | `/api/clases/configuracion` | clases:configurar | Consultar o cambiar duración (15–240 minutos) |
-| GET/POST/PUT/DELETE | `/api/clases/horarios[/:id]` | clases:gestionar | Horarios semanales del profesor autenticado |
-| GET | `/api/clases/horarios/salas-disponibles?diaSemana=&horaInicio=` | clases:gestionar | Salas libres para día y hora |
+| GET/POST/PUT/DELETE | `/api/clases/horarios[/:id]` | clases:gestionar | El profesor gestiona sus horarios; el admin puede gestionar y asignar horarios a cualquier profesor |
+| GET | `/api/clases/horarios/salas-disponibles?comienzaDesde=&horaInicio=&repetirSemanas=&profesional=` | clases:gestionar | Salas libres para las fechas, hora y profesor elegidos |
 | GET | `/api/clientes` - `/api/clientes/:id` | clientes:read | Listar y ver detalle |
 | POST | `/api/clientes` | clientes:create | Crear |
 | PUT | `/api/clientes/:id` | clientes:update | Modificar |
@@ -353,7 +350,3 @@ El grupo revisó, probó y ajustó todo el código generado. Las decisiones de d
 - Pug: https://pugjs.org/api/getting-started.html
 - MDN, Fetch API: https://developer.mozilla.org/es/docs/Web/API/Fetch_API
 - MongoDB Manual: https://www.mongodb.com/docs/manual/
-- Socket.io v4: https://socket.io/docs/v4/
-- Socket.io, salas (rooms): https://socket.io/docs/v4/rooms/
-- Socket.io, middlewares y autenticación: https://socket.io/docs/v4/middlewares/
-- MongoDB, índices parciales: https://www.mongodb.com/docs/manual/core/index-partial/

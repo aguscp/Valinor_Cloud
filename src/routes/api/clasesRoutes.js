@@ -33,7 +33,7 @@ router.put("/horarios/:id", requierePermiso("clases:gestionar"), actualizarHorar
 router.delete("/horarios/:id", requierePermiso("clases:gestionar"), eliminarHorario);
 router.get("/para-reservar", requierePermiso("turnos:create"), obtenerClasesParaReserva);
 router.get("/disponibles", requierePermiso("clases:read"), obtenerClasesDisponiblesCliente);
-router.get("/mis-reservas", requierePermiso("clases:read"), obtenerMisReservas);
+router.get("/mis-reservas", requierePermiso("clases:reservar"), obtenerMisReservas);
 router.get("/reservas", requierePermiso("turnos:read"), obtenerReservas);
 router.patch(
   "/reservas/:id/cancelar",

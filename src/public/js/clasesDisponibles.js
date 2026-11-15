@@ -154,15 +154,16 @@ const abrirDetalleClase = (clase) => {
       : `${clase.capacidad - clase.reservas} de ${clase.capacidad} lugares disponibles`
   );
   if (clase.reservadaPorMi) agregarDetalle("Tu reserva", "Ya tenés un lugar reservado");
-
-  botonReservar.disabled =
-    clase.reservas >= clase.capacidad || clase.reservadaPorMi;
-  botonReservar.textContent = clase.reservas >= clase.capacidad
-    ? "Cupo completo"
-    : clase.reservadaPorMi
-      ? "Ya reservaste"
-      : "Reservar lugar";
-  mostrarError(errorReservaClase, "");
+  if (botonReservar) {
+    botonReservar.disabled =
+      clase.reservas >= clase.capacidad || clase.reservadaPorMi;
+    botonReservar.textContent = clase.reservas >= clase.capacidad
+      ? "Cupo completo"
+      : clase.reservadaPorMi
+        ? "Ya reservaste"
+        : "Reservar lugar";
+    mostrarError(errorReservaClase, "");
+  }
   modalDetalleClase.hidden = false;
   modalDetalleClase.querySelector(".btn-cerrar-modal").focus();
 };
@@ -238,7 +239,9 @@ const cargarReservas = async () => {
 };
 
 const cargarDatos = async () => {
-  await Promise.all([cargarClases(), cargarReservas()]);
+  const tareas = [cargarClases()];
+  if (botonReservar) tareas.push(cargarReservas());
+  await Promise.all(tareas);
 };
 
 semanaAnterior.addEventListener("click", () => {
@@ -256,20 +259,22 @@ semanaSiguiente.addEventListener("click", () => {
 });
 
 buscarClase.addEventListener("input", renderizarClases);
-botonReservar.addEventListener("click", async () => {
-  if (!claseSeleccionada || botonReservar.disabled) return;
-  botonReservar.disabled = true;
-  mostrarError(errorReservaClase, "");
-  try {
-    await api(`/api/clases/${claseSeleccionada._id}/reservas`, { method: "POST" });
-    modalDetalleClase.hidden = true;
-    await cargarDatos();
-  } catch (error) {
-    mostrarError(errorReservaClase, error.message);
-    botonReservar.disabled = false;
-    await cargarDatos();
-  }
-});
+if (botonReservar) {
+  botonReservar.addEventListener("click", async () => {
+    if (!claseSeleccionada || botonReservar.disabled) return;
+    botonReservar.disabled = true;
+    mostrarError(errorReservaClase, "");
+    try {
+      await api(`/api/clases/${claseSeleccionada._id}/reservas`, { method: "POST" });
+      modalDetalleClase.hidden = true;
+      await cargarDatos();
+    } catch (error) {
+      mostrarError(errorReservaClase, error.message);
+      botonReservar.disabled = false;
+      await cargarDatos();
+    }
+  });
+}
 
 configurarModal(modalDetalleClase);
 renderizarDias();

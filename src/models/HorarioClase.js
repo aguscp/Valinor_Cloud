@@ -1,5 +1,11 @@
 const mongoose = require("mongoose");
 
+const fechaEsValida = (valor) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
+  const fecha = new Date(`${valor}T00:00:00Z`);
+  return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor;
+};
+
 const horarioClaseSchema = new mongoose.Schema(
   {
     profesional: {
@@ -13,12 +19,20 @@ const horarioClaseSchema = new mongoose.Schema(
       trim: true,
       maxlength: [80, "El tipo de clase no puede superar los 80 caracteres"],
     },
-    diaSemana: {
+    comienzaDesde: {
+      type: String,
+      required: [true, "La fecha de inicio es obligatoria"],
+      validate: {
+        validator: fechaEsValida,
+        message: "La fecha de inicio debe tener el formato YYYY-MM-DD y ser válida",
+      },
+    },
+    repetirSemanas: {
       type: Number,
-      required: true,
-      min: 0,
-      max: 6,
-      validate: { validator: Number.isInteger, message: "El día no es válido" },
+      required: [true, "La cantidad de semanas es obligatoria"],
+      min: [1, "La repetición mínima es de 1 semana"],
+      max: [8, "La repetición máxima es de 8 semanas"],
+      validate: { validator: Number.isInteger, message: "La cantidad de semanas debe ser entera" },
     },
     horaInicio: {
       type: String,

@@ -11,6 +11,7 @@ const logger = require("./middlewares/logger");
 const { notFound, errorHandler } = require("./middlewares/errores");
 const { iniciarSocket } = require("./socket");
 const { recuperarTimeouts } = require("./services/chatService");
+const { migrarHorariosConRepeticion } = require("./services/clasesService");
 const ReservaClase = require("./models/ReservaClase");
 
 const authRoutes = require("./routes/api/authRoutes");
@@ -89,6 +90,10 @@ const iniciar = async () => {
     console.log(`Reservas de clases actualizadas: ${migracionReservas.modifiedCount}.`);
   }
   await actualizarIndiceReservas();
+  const horariosActualizados = await migrarHorariosConRepeticion();
+  if (horariosActualizados) {
+    console.log(`Horarios semanales actualizados: ${horariosActualizados}.`);
+  }
   await recuperarTimeouts();
   servidor.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);

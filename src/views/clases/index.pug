@@ -1,7 +1,7 @@
 extends ../layout
 
 block content
-  +encabezado("Clases disponibles", "Elegí un día para consultar las clases programadas y reservar tu lugar.")
+  +encabezado(soloLectura ? "Clases de la semana" : "Clases disponibles", soloLectura ? "Consultá las clases programadas de la semana." : "Elegí un día para consultar las clases programadas y reservar tu lugar.")
 
   +seccion("Calendario semanal")
     +alerta("errorClases")
@@ -22,17 +22,21 @@ block content
     +vacio("sinResultados", "No hay clases que coincidan con la búsqueda.")
 
   +modal("modalDetalleClase", "Detalle de la clase")
-    +alerta("errorReservaClase")
+    if !soloLectura
+      +alerta("errorReservaClase")
     div#detalleClase(class="space-y-3 text-sm text-gray-700")
     div(class="mt-6 flex flex-wrap justify-end gap-3")
       button.btn.btn-secundario.btn-cerrar-modal(type="button") Cerrar
-      button#reservarClase.btn.btn-primario(type="button") Reservar lugar
+      if !soloLectura
+        button#reservarClase.btn.btn-primario(type="button") Reservar lugar
 
-  +seccion("Mis reservas")
-    +alerta("errorReservas")
-    +tabla(["Fecha", "Hora", "Clase", "Cliente", "Instructor", "Sala", "Estado", "Acciones"], "tablaReservas")
-    +vacio("sinReservas", "Todavía no reservaste clases.")
+  if !soloLectura
+    +seccion("Mis reservas")
+      +alerta("errorReservas")
+      +tabla(["Fecha", "Hora", "Clase", "Cliente", "Instructor", "Sala", "Estado", "Acciones"], "tablaReservas")
+      +vacio("sinReservas", "Todavía no reservaste clases.")
 
 block scripts
-  script(src="/js/reservasTabla.js")
+  if !soloLectura
+    script(src="/js/reservasTabla.js")
   script(src="/js/clasesDisponibles.js")

@@ -52,7 +52,60 @@ const obtenerConfiguracion = async () => {
   return configuracion || { duracionMinutos: 60 };
 };
 
+const sumarDias = (fechaTexto, dias) => {
+  const fecha = new Date(`${fechaTexto}T12:00:00Z`);
+  fecha.setUTCDate(fecha.getUTCDate() + dias);
+  return fecha.toISOString().slice(0, 10);
+};
+
+const diaDeLaFecha = (fecha) => new Date(`${fecha}T12:00:00Z`).getUTCDay();
+
+const esFechaValida = (fecha) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return false;
+  const fechaParseada = new Date(`${fecha}T00:00:00Z`);
+  return (
+    !Number.isNaN(fechaParseada.getTime()) &&
+    fechaParseada.toISOString().slice(0, 10) === fecha
+  );
+};
+
+const primeraFechaDeOcurrencia = (horario) => horario.comienzaDesde;
+
+const ultimaFechaDeOcurrencia = (horario) =>
+  sumarDias(
+    primeraFechaDeOcurrencia(horario),
+    (horario.repetirSemanas - 1) * 7
+  );
+
+const hayOcurrenciaEnComun = (horarioA, horarioB) => {
+  if (diaDeLaFecha(horarioA.comienzaDesde) !== diaDeLaFecha(horarioB.comienzaDesde)) return false;
+  return (
+    primeraFechaDeOcurrencia(horarioA) <= ultimaFechaDeOcurrencia(horarioB) &&
+    primeraFechaDeOcurrencia(horarioB) <= ultimaFechaDeOcurrencia(horarioA)
+  );
+};
+
+const incluyeOcurrencia = (horario, fecha) => {
+  const inicio = primeraFechaDeOcurrencia(horario);
+  const fin = ultimaFechaDeOcurrencia(horario);
+  return (
+    fecha >= inicio &&
+    fecha <= fin &&
+    diaDeLaFecha(fecha) === diaDeLaFecha(inicio)
+  );
+};
+
 const validarHorario = async ({ horario, excluirId }) => {
+  if (!esFechaValida(horario.comienzaDesde)) {
+    throw crearError(400, "La fecha de inicio no es válida");
+  }
+  if (
+    !Number.isInteger(horario.repetirSemanas) ||
+    horario.repetirSemanas < 1 ||
+    horario.repetirSemanas > 8
+  ) {
+    throw crearError(400, "La repetición debe ser de 1 a 8 semanas");
+  }
   const [sala, profesional, configuracion] = await Promise.all([
     Sala.findOne({ _id: horario.sala, activa: true }),
     Profesional.findById(horario.profesional),
@@ -62,14 +115,15 @@ const validarHorario = async ({ horario, excluirId }) => {
   if (!profesional) throw crearError(400, "El profesional vinculado no existe");
 
   const horaFin = sumarMinutos(horario.horaInicio, configuracion.duracionMinutos);
-  const filtros = { diaSemana: horario.diaSemana, activo: true };
+  const filtros = { activo: true };
   if (excluirId) filtros._id = mongoose.trusted({ $ne: excluirId });
   const horarios = await HorarioClase.find(filtros);
   const salaIds = new Set([String(horario.sala)]);
   const profesionalIds = new Set([String(horario.profesional)]);
   const candidatos = horarios.filter(
     (otro) =>
-      salaIds.has(String(otro.sala)) || profesionalIds.has(String(otro.profesional))
+      hayOcurrenciaEnComun(horario, otro) &&
+      (salaIds.has(String(otro.sala)) || profesionalIds.has(String(otro.profesional)))
   );
 
   for (const otro of candidatos) {
@@ -89,18 +143,23 @@ const validarHorario = async ({ horario, excluirId }) => {
   }
 
   const fechaDesde = fechaActualEnArgentina();
+  const fechaInicioOcurrencias =
+    primeraFechaDeOcurrencia(horario) > fechaDesde
+      ? primeraFechaDeOcurrencia(horario)
+      : fechaDesde;
+  const fechaFinOcurrencias = ultimaFechaDeOcurrencia(horario);
   const clasesConReservas = await ClaseProgramada.find({
-    fecha: mongoose.trusted({ $gte: fechaDesde }),
+    fecha: mongoose.trusted({
+      $gte: fechaInicioOcurrencias,
+      $lte: fechaFinOcurrencias,
+    }),
     reservas: mongoose.trusted({ $gt: 0 }),
     activa: true,
   });
-  const zonaHoy = new Date(`${fechaDesde}T12:00:00Z`);
   const dias = [];
-  for (let i = 0; i < SEMANAS_ADELANTE * 7; i += 1) {
-    const fecha = new Date(zonaHoy.getTime() + i * 86400000);
-    if (fecha.getUTCDay() === horario.diaSemana) {
-      dias.push(fecha.toISOString().slice(0, 10));
-    }
+  for (let semana = 0; semana < horario.repetirSemanas; semana += 1) {
+    const fecha = sumarDias(primeraFechaDeOcurrencia(horario), semana * 7);
+    if (fecha >= fechaDesde) dias.push(fecha);
   }
   const horaHoy = horaActualEnArgentina();
   for (const clase of clasesConReservas) {
@@ -146,15 +205,22 @@ const generarClasesFuturas = () =>
     const horarios = await HorarioClase.find({ activo: true }).populate("sala", "capacidad activa");
     const { duracionMinutos } = await obtenerConfiguracion();
     const ahora = horaActualEnArgentina();
-    const fechaBase = new Date(`${ahora.year}-${ahora.month}-${ahora.day}T12:00:00Z`);
     const fechaHoraAhora = `${ahora.year}-${ahora.month}-${ahora.day}T${ahora.hour}:${ahora.minute}`;
+    const fechaFinHorizonte = sumarDias(
+      `${ahora.year}-${ahora.month}-${ahora.day}`,
+      SEMANAS_ADELANTE * 7
+    );
 
     for (const horario of horarios) {
       if (!horario.sala || !horario.sala.activa) continue;
-      for (let dia = 0; dia < SEMANAS_ADELANTE * 7; dia += 1) {
-        const fecha = new Date(fechaBase.getTime() + dia * 86400000);
-        if (fecha.getUTCDay() !== horario.diaSemana) continue;
-        const fechaTexto = fecha.toISOString().slice(0, 10);
+      for (let semana = 0; semana < horario.repetirSemanas; semana += 1) {
+        const fechaTexto = sumarDias(primeraFechaDeOcurrencia(horario), semana * 7);
+        if (
+          fechaTexto < `${ahora.year}-${ahora.month}-${ahora.day}` ||
+          fechaTexto >= fechaFinHorizonte
+        ) {
+          continue;
+        }
         if (`${fechaTexto}T${horario.horaInicio}` <= fechaHoraAhora) continue;
 
         const horaFin = sumarMinutos(horario.horaInicio, duracionMinutos);
@@ -199,15 +265,64 @@ const generarClasesFuturas = () =>
     }
   });
 
+const migrarHorariosConRepeticion = async () => {
+  const comienzaDesde = fechaActualEnArgentina();
+  const filtro = {
+    $or: [
+      { comienzaDesde: mongoose.trusted({ $exists: false }) },
+      { repetirSemanas: mongoose.trusted({ $exists: false }) },
+    ],
+  };
+  const idsActualizados = new Set(
+    (await HorarioClase.find(filtro).select("_id")).map((horario) => String(horario._id))
+  );
+  await Promise.all([
+    HorarioClase.updateMany(
+      { comienzaDesde: mongoose.trusted({ $exists: false }) },
+      { $set: { comienzaDesde } }
+    ),
+    HorarioClase.updateMany(
+      { repetirSemanas: mongoose.trusted({ $exists: false }) },
+      { $set: { repetirSemanas: SEMANAS_ADELANTE } }
+    ),
+  ]);
+
+  const horariosAnteriores = HorarioClase.collection.find({
+    diaSemana: { $exists: true },
+    comienzaDesde: { $type: "string" },
+  });
+  for await (const horario of horariosAnteriores) {
+    if (
+      !Number.isInteger(horario.diaSemana) ||
+      horario.diaSemana < 0 ||
+      horario.diaSemana > 6 ||
+      !esFechaValida(horario.comienzaDesde)
+    ) {
+      throw crearError(500, `No se pudo migrar el horario ${horario._id}: sus datos de día o fecha no son válidos`);
+    }
+    const diasHastaLaClase =
+      (horario.diaSemana - diaDeLaFecha(horario.comienzaDesde) + 7) % 7;
+    const nuevaFecha = sumarDias(horario.comienzaDesde, diasHastaLaClase);
+    await HorarioClase.collection.updateOne(
+      { _id: horario._id },
+      {
+        $set: { comienzaDesde: nuevaFecha },
+        $unset: { diaSemana: "" },
+      }
+    );
+    idsActualizados.add(String(horario._id));
+  }
+  return idsActualizados.size;
+};
+
 const obtenerClasesDisponibles = async () => {
   await generarClasesFuturas();
   const ahora = horaActualEnArgentina();
-  const fechaHasta = new Date(`${fechaActualEnArgentina()}T12:00:00Z`);
-  fechaHasta.setUTCDate(fechaHasta.getUTCDate() + SEMANAS_ADELANTE * 7);
+  const fechaHasta = sumarDias(fechaActualEnArgentina(), SEMANAS_ADELANTE * 7);
   const clases = await ClaseProgramada.find({
     fecha: mongoose.trusted({
       $gte: fechaActualEnArgentina(),
-      $lte: fechaHasta.toISOString().slice(0, 10),
+      $lt: fechaHasta,
     }),
     activa: true,
   })
@@ -224,7 +339,12 @@ module.exports = {
   encolarCambio,
   sumarMinutos,
   validarHorario,
+  primeraFechaDeOcurrencia,
+  ultimaFechaDeOcurrencia,
+  hayOcurrenciaEnComun,
+  incluyeOcurrencia,
   refrescarClasesFuturas,
+  migrarHorariosConRepeticion,
   obtenerClasesDisponibles,
   generarClasesFuturas,
 };

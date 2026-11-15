@@ -25,7 +25,8 @@ const mostrarProfesionales = (req, res) => {
 
 const mostrarTurnos = (req, res) => res.render("turnos/index");
 
-const mostrarClases = (req, res) => res.render("clases/index");
+const mostrarClases = (req, res) =>
+  res.render("clases/index", { soloLectura: req.usuario.rol === "profesional" });
 
 const mostrarPerfilCliente = (req, res) => {
   if (req.usuario.rol !== "cliente") return res.redirect("/");
@@ -33,8 +34,8 @@ const mostrarPerfilCliente = (req, res) => {
 };
 
 const mostrarHorariosDocente = (req, res) => {
-  if (req.usuario.rol !== "profesional") return res.redirect("/");
-  res.render("clases/horarios");
+  if (!["profesional", "admin"].includes(req.usuario.rol)) return res.redirect("/");
+  res.render("clases/horarios", { esAdministrador: req.usuario.rol === "admin" });
 };
 
 const mostrarSalas = (req, res) => res.render("salas/index");

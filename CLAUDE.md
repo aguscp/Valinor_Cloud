@@ -89,8 +89,9 @@ Detalle completo en `docs/refactor-websockets.md`.
 ## Clases grupales
 
 - Admin administra salas/capacidad y una duración general de 15 a 240 minutos (por defecto 60).
-- Cada profesional publica y edita su tipo de clase (texto), día y hora semanal, y elige una sala disponible.
-- El servidor genera ocurrencias para las próximas 8 semanas; los clientes ven el cupo y reservan desde `/clases`. Las clases completas no se pueden reservar.
+- Cada profesional publica y edita su tipo de clase, la fecha de la primera clase, la hora, la repetición de 1 a 8 semanas y la sala disponible. La fecha elegida determina el día semanal.
+- Admin también puede crear y editar horarios desde `/mis-clases`, asignándolos a un profesional.
+- El servidor genera el número elegido de ocurrencias semanales (de 1 a 8), desde la fecha seleccionada, y las muestra cuando entran en la ventana disponible; clientes ven el cupo y reservan desde `/clases`, mientras que profesionales pueden consultar esa vista sin reservar. Las clases completas no se pueden reservar.
 - Recepción/admin asignan clases existentes a clientes desde Gestión de reservas; esa operación aplica las mismas reglas de cupo, duplicados y superposición que la reserva del cliente.
 - Las reservas se gestionan desde `/turnos` y se sirven mediante `/api/clases/reservas`; no existe el flujo ni la API de turnos individuales.
 - No se permiten superposiciones de sala/profesor, ni reservas duplicadas o superpuestas por cliente. El cupo se descuenta atómicamente.

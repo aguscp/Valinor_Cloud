@@ -14,11 +14,12 @@ const profesional = [
   "turnos:read",
   "turnos:update",
   "chat:usar",
+  "clases:read",
   "clases:gestionar",
 ];
 
 const recepcion = [
-  ...profesional.filter((permiso) => permiso !== "clases:gestionar"),
+  ...profesional.filter((permiso) => !["clases:read", "clases:gestionar"].includes(permiso)),
   "clientes:create",
   "clientes:update",
   "clientes:delete",
@@ -38,6 +39,7 @@ const admin = [
   "auditoria:read",
   "chat:moderar",
   "salas:manage",
+  "clases:gestionar",
   "clases:configurar",
 ];
 
