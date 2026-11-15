@@ -75,7 +75,7 @@ La guía completa está en [`docs/Docker/docker-readme.md`](docs/Docker/docker-r
 | `profesional3` | `prof9012` | profesional | Clases de Valeria Quiroga |
 | `cliente1` a `cliente20` | `cliente123` | cliente | Una cuenta vinculada a cada cliente de prueba |
 
-El seed crea 20 clientes, 3 salas (capacidades 15, 15 y 20) y horarios de prueba de Pilates Reformer, Yoga y Pilates Mat. Incluye clases los martes, miércoles, jueves y viernes, además de tres horarios iniciales. Cada horario genera una clase semanal durante dos semanas (14 clases en total). Una clase de Pilates Reformer queda completa y las otras 13 se crean con entre 5 y 10 reservas. El seed genera las ocurrencias y sus reservas para que aparezcan directamente en el calendario y en los historiales de los clientes.
+El seed crea 20 clientes, 3 salas (capacidades 15, 15 y 20) y exactamente 3 horarios diarios de Pilates Reformer, Yoga y Pilates Mat, todos los días de lunes a domingo. Cada horario genera una clase semanal durante 8 semanas (168 clases en total). También crea las clases de hoy. Cada clase recibe entre 5 y 6 reservas; los clientes se distribuyen para que nadie quede inscripto en más de una clase por fecha.
 
 ---
 
