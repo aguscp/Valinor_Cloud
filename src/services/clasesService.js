@@ -202,66 +202,83 @@ const refrescarClasesFuturas = async (idHorario) => {
 
 const generarClasesFuturas = () =>
   encolarCambio(async () => {
-    const horarios = await HorarioClase.find({ activo: true }).populate("sala", "capacidad activa");
-    const { duracionMinutos } = await obtenerConfiguracion();
+    const [horarios, { duracionMinutos }] = await Promise.all([
+      HorarioClase.find({ activo: true })
+        .populate("sala", "capacidad activa")
+        .lean(),
+      obtenerConfiguracion(),
+    ]);
     const ahora = horaActualEnArgentina();
     const fechaHoraAhora = `${ahora.year}-${ahora.month}-${ahora.day}T${ahora.hour}:${ahora.minute}`;
+    const fechaHoy = `${ahora.year}-${ahora.month}-${ahora.day}`;
     const fechaFinHorizonte = sumarDias(
-      `${ahora.year}-${ahora.month}-${ahora.day}`,
+      fechaHoy,
       SEMANAS_ADELANTE * 7
     );
+    const existentes = await ClaseProgramada.find({
+      fecha: mongoose.trusted({ $gte: fechaHoy, $lt: fechaFinHorizonte }),
+    }).lean();
+    const clasesPorFecha = new Map();
+    const horariosYFechasExistentes = new Set();
+    for (const clase of existentes) {
+      const lista = clasesPorFecha.get(clase.fecha) || [];
+      lista.push(clase);
+      clasesPorFecha.set(clase.fecha, lista);
+      horariosYFechasExistentes.add(`${clase.horario}:${clase.fecha}`);
+    }
+    const operaciones = [];
 
     for (const horario of horarios) {
       if (!horario.sala || !horario.sala.activa) continue;
       for (let semana = 0; semana < horario.repetirSemanas; semana += 1) {
         const fechaTexto = sumarDias(primeraFechaDeOcurrencia(horario), semana * 7);
         if (
-          fechaTexto < `${ahora.year}-${ahora.month}-${ahora.day}` ||
+          fechaTexto < fechaHoy ||
           fechaTexto >= fechaFinHorizonte
         ) {
           continue;
         }
         if (`${fechaTexto}T${horario.horaInicio}` <= fechaHoraAhora) continue;
+        const claveHorarioFecha = `${horario._id}:${fechaTexto}`;
+        if (horariosYFechasExistentes.has(claveHorarioFecha)) continue;
 
         const horaFin = sumarMinutos(horario.horaInicio, duracionMinutos);
-        const mismaFecha = await ClaseProgramada.find({
-          fecha: fechaTexto,
-          activa: true,
-          $or: [{ sala: horario.sala._id }, { profesional: horario.profesional }],
-        });
+        const mismaFecha = clasesPorFecha.get(fechaTexto) || [];
         const seSuperpone = mismaFecha.some((clase) =>
+          clase.activa &&
+          (String(clase.sala) === String(horario.sala._id) ||
+            String(clase.profesional) === String(horario.profesional)) &&
           haySuperposicion(horario.horaInicio, horaFin, clase.horaInicio, clase.horaFin)
         );
         if (seSuperpone) continue;
 
-        try {
-          await ClaseProgramada.updateOne(
-            { horario: horario._id, fecha: fechaTexto },
-            {
-              $setOnInsert: {
-                horario: horario._id,
-                fecha: fechaTexto,
-                tipo: horario.tipo,
-                profesional: horario.profesional,
-                sala: horario.sala._id,
-                horaInicio: horario.horaInicio,
-                horaFin,
-                capacidad: horario.sala.capacidad,
-                reservas: 0,
-                activa: true,
-              },
-            },
-            { upsert: true }
-          );
-        } catch (error) {
-          if (error.code !== 11000) throw error;
-          const ocurrencia = await ClaseProgramada.exists({
-            horario: horario._id,
-            fecha: fechaTexto,
-          });
-          if (!ocurrencia) throw error;
-        }
+        const nuevaClase = {
+          horario: horario._id,
+          fecha: fechaTexto,
+          tipo: horario.tipo,
+          profesional: horario.profesional,
+          sala: horario.sala._id,
+          horaInicio: horario.horaInicio,
+          horaFin,
+          capacidad: horario.sala.capacidad,
+          reservas: 0,
+          activa: true,
+        };
+        operaciones.push({
+          updateOne: {
+            filter: { horario: horario._id, fecha: fechaTexto },
+            update: { $setOnInsert: nuevaClase },
+            upsert: true,
+          },
+        });
+        horariosYFechasExistentes.add(claveHorarioFecha);
+        mismaFecha.push(nuevaClase);
+        clasesPorFecha.set(fechaTexto, mismaFecha);
       }
+    }
+
+    if (operaciones.length > 0) {
+      await ClaseProgramada.bulkWrite(operaciones, { ordered: true });
     }
   });
 
@@ -315,13 +332,17 @@ const migrarHorariosConRepeticion = async () => {
   return idsActualizados.size;
 };
 
-const obtenerClasesDisponibles = async () => {
+const obtenerClasesDisponibles = async ({ incluirSemanaActual = false } = {}) => {
   await generarClasesFuturas();
   const ahora = horaActualEnArgentina();
-  const fechaHasta = sumarDias(fechaActualEnArgentina(), SEMANAS_ADELANTE * 7);
+  const fechaHoy = fechaActualEnArgentina();
+  const fechaDesde = incluirSemanaActual
+    ? sumarDias(fechaHoy, -((diaDeLaFecha(fechaHoy) + 6) % 7))
+    : fechaHoy;
+  const fechaHasta = sumarDias(fechaHoy, SEMANAS_ADELANTE * 7);
   const clases = await ClaseProgramada.find({
     fecha: mongoose.trusted({
-      $gte: fechaActualEnArgentina(),
+      $gte: fechaDesde,
       $lt: fechaHasta,
     }),
     activa: true,
@@ -329,6 +350,7 @@ const obtenerClasesDisponibles = async () => {
     .populate("profesional", "nombre apellido")
     .populate("sala", "nombre capacidad")
     .sort({ fecha: 1, horaInicio: 1 });
+  if (incluirSemanaActual) return clases;
   const fechaHoraAhora = `${ahora.year}-${ahora.month}-${ahora.day}T${ahora.hour}:${ahora.minute}`;
   return clases.filter((clase) => `${clase.fecha}T${clase.horaInicio}` > fechaHoraAhora);
 };

@@ -50,32 +50,32 @@ const SALAS_DE_PRUEBA = [
 ];
 
 const CLASES_POR_DIA = [
-  {
-    tipo: "Pilates Reformer",
-    horaInicio: "09:00",
-    sala: 0,
-    profesional: 0,
-    reservasPorSemana: [5, 6],
-  },
-  { tipo: "Yoga", horaInicio: "13:00", sala: 1, profesional: 1, reservasPorSemana: [6, 5] },
-  { tipo: "Pilates Mat", horaInicio: "17:00", sala: 2, profesional: 2, reservasPorSemana: [5, 6] },
+  { tipo: "Pilates Reformer", horaInicio: "09:00", sala: 0, profesional: 0 },
+  { tipo: "Yoga", horaInicio: "13:00", sala: 1, profesional: 1 },
+  { tipo: "Pilates Mat", horaInicio: "17:00", sala: 2, profesional: 2 },
 ];
-const SEMANAS_DE_PRUEBA = 8;
+const SEMANAS_DE_PRUEBA = 3;
 
 const HORARIOS_DE_PRUEBA = Array.from({ length: 7 }, (_, diaSemana) =>
-  CLASES_POR_DIA.map(({ reservasPorSemana, ...clase }) => ({
+  CLASES_POR_DIA.map((clase, indiceClase) => ({
     ...clase,
     diaSemana,
     repetirSemanas: SEMANAS_DE_PRUEBA,
     reservasPorOcurrencia: Array.from(
       { length: SEMANAS_DE_PRUEBA },
-      (_, semana) => reservasPorSemana[semana % reservasPorSemana.length]
+      (_, semana) =>
+        semana >= 2
+          ? 0
+          : indiceClase === 0
+            ? 1
+            : 2
     ),
   }))
 ).flat();
 
 const validarHorariosDePrueba = (horarios) => {
   const cantidadPorDia = Array(7).fill(0);
+  const reservasPorSemana = Array(SEMANAS_DE_PRUEBA).fill(0);
   for (const horario of horarios) {
     if (!Number.isInteger(horario.diaSemana) || horario.diaSemana < 0 || horario.diaSemana > 6) {
       throw new Error(`El horario ${horario.tipo} tiene un día de semana inválido.`);
@@ -85,13 +85,65 @@ const validarHorariosDePrueba = (horarios) => {
       throw new Error(`El horario ${horario.tipo} debe repetirse durante ${SEMANAS_DE_PRUEBA} semanas.`);
     }
     if (horario.reservasPorOcurrencia.length !== SEMANAS_DE_PRUEBA) {
-      throw new Error(`El horario ${horario.tipo} no tiene reservas de prueba para las 8 semanas.`);
+      throw new Error(
+        `El horario ${horario.tipo} no tiene reservas de prueba para las ${SEMANAS_DE_PRUEBA} semanas.`
+      );
     }
+    if (horario.reservasPorOcurrencia.slice(2).some((cantidad) => cantidad !== 0)) {
+      throw new Error(`El horario ${horario.tipo} no debe tener reservas a partir de la tercera semana.`);
+    }
+    horario.reservasPorOcurrencia.forEach((cantidad, semana) => {
+      if (cantidad < 0 || cantidad > 2) {
+        throw new Error(`La clase ${horario.tipo} debe tener como máximo 2 reservas.`);
+      }
+      reservasPorSemana[semana] += cantidad;
+    });
+  }
+  if (reservasPorSemana.slice(0, 2).some((cantidad) => cantidad > 35)) {
+    throw new Error("Las reservas de una semana superan el límite de 2 por cliente.");
   }
   const diaIncompleto = cantidadPorDia.findIndex((cantidad) => cantidad !== 3);
   if (diaIncompleto !== -1) {
     throw new Error(`El día ${diaIncompleto} debe tener exactamente 3 clases de prueba.`);
   }
+  if (reservasPorSemana.some((cantidad) => cantidad > CLIENTES.length * 2)) {
+    throw new Error("Las reservas de una semana superan el límite de 2 por cliente.");
+  }
+};
+
+const elegirClientesParaClase = ({
+  clientes,
+  cantidad,
+  fecha,
+  semana,
+  indiceInicial,
+  clientesReservadosPorFecha,
+  reservasPorClientePorSemana,
+}) => {
+  const clientesDelDia = clientesReservadosPorFecha.get(fecha) || new Set();
+  const reservasSemanales =
+    reservasPorClientePorSemana.get(semana) || new Map();
+  const elegidos = [];
+  for (let desplazamiento = 0; desplazamiento < clientes.length; desplazamiento += 1) {
+    const cliente = clientes[(indiceInicial + desplazamiento) % clientes.length];
+    const id = String(cliente._id);
+    if (clientesDelDia.has(id) || (reservasSemanales.get(id) || 0) >= 2) continue;
+    elegidos.push(cliente);
+    if (elegidos.length === cantidad) break;
+  }
+  if (elegidos.length !== cantidad) {
+    throw new Error(
+      `No hay suficientes clientes que cumplan los límites para reservar el ${fecha}.`
+    );
+  }
+  for (const cliente of elegidos) {
+    const id = String(cliente._id);
+    clientesDelDia.add(id);
+    reservasSemanales.set(id, (reservasSemanales.get(id) || 0) + 1);
+  }
+  clientesReservadosPorFecha.set(fecha, clientesDelDia);
+  reservasPorClientePorSemana.set(semana, reservasSemanales);
+  return elegidos;
 };
 
 const horaActualEnArgentina = () =>
@@ -113,6 +165,11 @@ const sumarDias = (fecha, dias) => {
   const resultado = new Date(`${fecha}T12:00:00Z`);
   resultado.setUTCDate(resultado.getUTCDate() + dias);
   return resultado.toISOString().slice(0, 10);
+};
+
+const inicioDeSemana = (fecha) => {
+  const dia = new Date(`${fecha}T12:00:00Z`).getUTCDay();
+  return sumarDias(fecha, -((dia + 6) % 7));
 };
 
 const fechaDeInicioParaDia = (diaSemana, ahora) => {
@@ -236,6 +293,7 @@ const sembrar = async () => {
   let totalReservas = 0;
   let indiceCliente = 0;
   const clientesReservadosPorFecha = new Map();
+  const reservasPorClientePorSemana = new Map();
   for (const [indiceHorario, horario] of horarios.entries()) {
     const ocurrencias = await ClaseProgramada.find({ horario: horario._id }).sort({ fecha: 1 });
     const cantidades = HORARIOS_DE_PRUEBA[indiceHorario].reservasPorOcurrencia;
@@ -247,7 +305,9 @@ const sembrar = async () => {
     }
     const horarioDePrueba = HORARIOS_DE_PRUEBA[indiceHorario];
     if (ocurrencias.length !== SEMANAS_DE_PRUEBA) {
-      throw new Error(`El horario ${horario.tipo} no generó sus 8 clases semanales.`);
+      throw new Error(
+        `El horario ${horario.tipo} no generó sus ${SEMANAS_DE_PRUEBA} clases semanales.`
+      );
     }
     if (
       ocurrencias.some(
@@ -261,27 +321,26 @@ const sembrar = async () => {
 
     for (const [indiceOcurrencia, clase] of ocurrencias.entries()) {
       const cantidad = cantidades[indiceOcurrencia];
+      if (cantidad === 0) {
+        const reservasExistentes = await ReservaClase.exists({ clase: clase._id });
+        if (clase.reservas !== 0 || reservasExistentes) {
+          throw new Error(`La clase ${clase.tipo} del ${clase.fecha} debe quedar sin reservas.`);
+        }
+        continue;
+      }
       if (cantidad > clase.capacidad || cantidad > clientes.length) {
         throw new Error(`La cantidad de reservas de ${clase.tipo} supera su capacidad o los clientes disponibles.`);
       }
 
-      const clientesDeLaFecha = clientesReservadosPorFecha.get(clase.fecha) || new Set();
-      if (clientesDeLaFecha.size + cantidad > clientes.length) {
-        throw new Error(`Hay más reservas que clientes distintos el ${clase.fecha}.`);
-      }
-      const clientesElegidos = [];
-      for (let desplazamiento = 0; desplazamiento < clientes.length; desplazamiento += 1) {
-        const indice = (indiceCliente + desplazamiento) % clientes.length;
-        const cliente = clientes[indice];
-        if (clientesDeLaFecha.has(String(cliente._id))) continue;
-        clientesElegidos.push(cliente);
-        if (clientesElegidos.length === cantidad) break;
-      }
-      if (clientesElegidos.length !== cantidad) {
-        throw new Error(`No hay suficientes clientes distintos para reservar ${clase.tipo} el ${clase.fecha}.`);
-      }
-      clientesElegidos.forEach((cliente) => clientesDeLaFecha.add(String(cliente._id)));
-      clientesReservadosPorFecha.set(clase.fecha, clientesDeLaFecha);
+      const clientesElegidos = elegirClientesParaClase({
+        clientes,
+        cantidad,
+        fecha: clase.fecha,
+        semana: inicioDeSemana(clase.fecha),
+        indiceInicial: indiceCliente,
+        clientesReservadosPorFecha,
+        reservasPorClientePorSemana,
+      });
       indiceCliente = (indiceCliente + cantidad) % clientes.length;
 
       await ReservaClase.insertMany(
@@ -323,5 +382,7 @@ module.exports = {
   HORARIOS_DE_PRUEBA,
   SEMANAS_DE_PRUEBA,
   fechaDeInicioParaDia,
+  inicioDeSemana,
   validarHorariosDePrueba,
+  elegirClientesParaClase,
 };

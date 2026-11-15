@@ -349,7 +349,7 @@ const eliminarHorario = async (req, res) =>
   });
 
 const obtenerClasesDisponiblesCliente = async (req, res) => {
-  const clases = await obtenerClasesDisponibles();
+  const clases = await obtenerClasesDisponibles({ incluirSemanaActual: true });
   if (req.usuario.rol !== "cliente") return res.json(clases);
   const reservas = await ReservaClase.find({
     cliente: req.usuario.cliente,
