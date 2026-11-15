@@ -60,6 +60,25 @@ const fechaLegible = (fecha) => formateadorFechaLarga.format(fechaUtc(fecha));
 const normalizarTexto = (texto) =>
   texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-AR");
 
+const fechaHoraActualEnArgentina = () => {
+  const partes = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date())
+      .map(({ type, value }) => [type, value])
+  );
+  return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}`;
+};
+const claseYaComenzo = (clase) =>
+  `${clase.fecha}T${clase.horaInicio}` <= fechaHoraActualEnArgentina();
+
 const hoy = fechaEnArgentina();
 let semanaActual = inicioDeSemana(hoy);
 let diaSeleccionado = hoy;
@@ -70,13 +89,17 @@ const renderizarDias = () => {
   const botones = Array.from({ length: 7 }, (_, indice) => {
     const fecha = sumarDias(semanaActual, indice);
     const fechaDate = fechaUtc(fecha);
+    const cantidadClases = clases.filter((clase) => clase.fecha === fecha).length;
     const esSeleccionado = fecha === diaSeleccionado;
     const esHoy = fecha === hoy;
     const yaPaso = fecha < hoy;
     const boton = document.createElement("button");
     boton.type = "button";
     boton.setAttribute("aria-pressed", String(esSeleccionado));
-    boton.setAttribute("aria-label", fechaLegible(fecha));
+    boton.setAttribute(
+      "aria-label",
+      `${fechaLegible(fecha)}, ${cantidadClases} ${cantidadClases === 1 ? "clase" : "clases"}`
+    );
     if (esHoy) boton.setAttribute("aria-current", "date");
     boton.className = [
       "flex min-h-20 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-3 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-marca",
@@ -101,7 +124,10 @@ const renderizarDias = () => {
       month: "short",
       timeZone: "UTC",
     }).format(fechaDate);
-    boton.append(nombre, numero, mes);
+    const cantidad = document.createElement("span");
+    cantidad.className = esSeleccionado ? "text-[10px] text-white/80" : "text-[10px] text-gray-500";
+    cantidad.textContent = `${cantidadClases} ${cantidadClases === 1 ? "clase" : "clases"}`;
+    boton.append(nombre, numero, mes, cantidad);
 
     if (esHoy) {
       const marcaHoy = document.createElement("span");
@@ -155,13 +181,18 @@ const abrirDetalleClase = (clase) => {
   );
   if (clase.reservadaPorMi) agregarDetalle("Tu reserva", "Ya tenés un lugar reservado");
   if (botonReservar) {
+    const yaComenzo = claseYaComenzo(clase);
     botonReservar.disabled =
-      clase.reservas >= clase.capacidad || clase.reservadaPorMi;
-    botonReservar.textContent = clase.reservas >= clase.capacidad
-      ? "Cupo completo"
-      : clase.reservadaPorMi
-        ? "Ya reservaste"
-        : "Reservar lugar";
+      yaComenzo || clase.reservas >= clase.capacidad || clase.reservadaPorMi;
+    if (yaComenzo) {
+      botonReservar.textContent = "La clase ya comenzó";
+    } else if (clase.reservas >= clase.capacidad) {
+      botonReservar.textContent = "Cupo completo";
+    } else if (clase.reservadaPorMi) {
+      botonReservar.textContent = "Ya reservaste";
+    } else {
+      botonReservar.textContent = "Reservar lugar";
+    }
     mostrarError(errorReservaClase, "");
   }
   modalDetalleClase.hidden = false;
@@ -170,6 +201,7 @@ const abrirDetalleClase = (clase) => {
 
 const crearTarjetaClase = (clase) => {
   const completa = clase.reservas >= clase.capacidad;
+  const yaComenzo = claseYaComenzo(clase);
   const tarjeta = document.createElement("button");
   tarjeta.type = "button";
   tarjeta.className = [
@@ -193,11 +225,15 @@ const crearTarjetaClase = (clase) => {
     : "Instructor no disponible";
   const cupo = document.createElement("span");
   cupo.className = "text-sm font-semibold";
-  cupo.textContent = clase.reservadaPorMi
-    ? "Tu lugar está reservado"
-    : completa
-      ? "Cupo completo"
-      : `${clase.capacidad - clase.reservas} lugares disponibles`;
+  if (clase.reservadaPorMi) {
+    cupo.textContent = "Tu lugar está reservado";
+  } else if (yaComenzo) {
+    cupo.textContent = "La clase ya comenzó";
+  } else if (completa) {
+    cupo.textContent = "Cupo completo";
+  } else {
+    cupo.textContent = `${clase.capacidad - clase.reservas} lugares disponibles`;
+  }
   tarjeta.append(titulo, horario, instructor, cupo);
   tarjeta.addEventListener("click", () => abrirDetalleClase(clase));
   return tarjeta;
@@ -217,6 +253,7 @@ const renderizarClases = () => {
 const cargarClases = async () => {
   try {
     clases = await api("/api/clases/disponibles");
+    renderizarDias();
     renderizarClases();
     mostrarError(errorClases, "");
   } catch (error) {
