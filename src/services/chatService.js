@@ -14,6 +14,7 @@ const { registrarAuditoria } = require("../helpers/auditoria");
 const presencia = require("../socket/presencia");
 const { emitirA } = require("../socket/emisor");
 const timeouts = require("./chatTimeouts");
+const { consultarIA } = require("./geminiService");
 
 const { trusted } = mongoose;
 const POBLAR = { path: "solicitante admin", select: "nombre usuario rol" };
@@ -222,6 +223,34 @@ const finalizarChat = async (req, chatId) => {
   return chat;
 };
 
+// Gemini participa como usuario virtual: su respuesta se guarda como un mensaje más
+// del chat (sin autor y con esIA en true) y se envía a los dos participantes.
+const responderConGemini = async (chat, pregunta) => {
+  let texto;
+  try {
+    texto = await consultarIA(pregunta);
+  } catch (error) {
+    console.error("Error al consultar Gemini:", error.message);
+    texto = "No pude responder en este momento. Intentá de nuevo más tarde.";
+  }
+
+  const mensaje = {
+    _id: new mongoose.Types.ObjectId(),
+    autor: null,
+    esIA: true,
+    texto: texto.slice(0, MAX_TEXTO),
+    createdAt: new Date(),
+  };
+  const actualizado = await Chat.findOneAndUpdate(
+    { _id: chat._id, estado: "activo" },
+    { $push: { mensajes: mensaje } },
+    { new: true, projection: { _id: 1 } }
+  );
+  if (!actualizado) return;
+
+  emitirA(participantes(chat), "chat:mensaje", { chatId: String(chat._id), mensaje });
+};
+
 const enviarMensaje = async (req, chatId, texto) => {
   const contenido = validarTexto(texto);
   const yo = req.usuario._id;
@@ -242,6 +271,12 @@ const enviarMensaje = async (req, chatId, texto) => {
   const datos = { chatId: String(chat._id), mensaje: { ...mensaje, autor: String(yo) } };
   // También al emisor: así se sincronizan sus otras pestañas.
   emitirA(participantes(chat), "chat:mensaje", datos);
+
+  // Si el mensaje empieza con @gemini, se consulta a la IA y se publica su respuesta.
+  if (/^@gemini\b/i.test(contenido)) {
+    const pregunta = contenido.replace(/^@gemini/i, "").trim();
+    if (pregunta) await responderConGemini(chat, pregunta);
+  }
   return datos.mensaje;
 };
 

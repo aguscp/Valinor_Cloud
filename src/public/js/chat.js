@@ -189,6 +189,13 @@
     hora.dateTime = mensaje.createdAt;
     hora.textContent = formatearHora(mensaje.createdAt);
 
+    if (mensaje.esIA) {
+      const nombre = document.createElement("span");
+      nombre.className = "text-[11px] font-semibold text-gray-600";
+      nombre.textContent = "Gemini";
+      item.append(nombre);
+    }
+
     item.append(texto, hora);
     return item;
   };
@@ -496,6 +503,7 @@
     const chat = esAdmin ? estado.chats.get(estado.abiertoId) : chatDelUsuario();
     const texto = el.texto.value.trim();
     if (!chat || !texto) return;
+    if (el.btnEnviarMensaje.disabled) return;
     el.btnEnviarMensaje.disabled = true;
     ejecutar(async () => {
       // Sin render optimista: se muestra lo que confirmó el servidor (deduplicado con el eco del socket).
