@@ -1,3 +1,5 @@
+// El JWT viaja en una cookie httpOnly que el navegador envía solo (mismo origen):
+// el JS no lo lee ni lo guarda, así no queda expuesto ante un XSS.
 const api = async (url, opciones = {}) => {
   const respuesta = await fetch(url, {
     method: opciones.method || "GET",
@@ -49,7 +51,7 @@ const crearBoton = (texto, clase, alHacerClick) => {
   const boton = document.createElement("button");
   boton.type = "button";
   boton.textContent = texto;
-  if (clase) boton.className = clase;
+  boton.className = ["btn btn-chico", clase].filter(Boolean).join(" ");
   boton.addEventListener("click", alHacerClick);
   return boton;
 };
@@ -64,7 +66,7 @@ const crearFila = (valores, acciones = []) => {
   });
   if (acciones !== null) {
     const celdaAcciones = document.createElement("td");
-    celdaAcciones.className = "acciones";
+    celdaAcciones.className = "whitespace-nowrap space-x-2";
     acciones.forEach((boton) => celdaAcciones.appendChild(boton));
     fila.appendChild(celdaAcciones);
   }
@@ -107,6 +109,77 @@ const configurarModal = (modal) => {
     });
   });
 };
+
+// Confirmación de acciones con el modal +modalConfirmacion (src/views/includes/mixins.pug),
+// en lugar del confirm() nativo del navegador. Devuelve una promesa: true si el usuario confirma,
+// false si cancela (botón, Escape o click fuera del cuadro).
+// variante: "peligro" (destructivas), "exito" o "primario" (por defecto).
+const confirmar = (() => {
+  const modal = document.getElementById("modalConfirmacion");
+  if (!modal) return async ({ mensaje }) => window.confirm(mensaje);
+
+  const titulo = document.getElementById("modalConfirmacionTitulo");
+  const mensaje = document.getElementById("modalConfirmacionMensaje");
+  const botonCancelar = document.getElementById("modalConfirmacionCancelar");
+  const botonAceptar = document.getElementById("modalConfirmacionAceptar");
+  const clasesBoton = { peligro: "btn-peligro", exito: "btn-atender", primario: "btn-primario" };
+  let resolverPendiente = null;
+  let focoPrevio = null;
+
+  const cerrar = (resultado) => {
+    if (!resolverPendiente) return;
+    modal.hidden = true;
+    const resolver = resolverPendiente;
+    resolverPendiente = null;
+    if (focoPrevio && document.contains(focoPrevio)) focoPrevio.focus();
+    resolver(resultado);
+  };
+
+  botonCancelar.addEventListener("click", () => cerrar(false));
+  botonAceptar.addEventListener("click", () => cerrar(true));
+  // Click en el fondo oscuro (fuera del cuadro) cancela.
+  modal.addEventListener("click", (evento) => {
+    if (evento.target === modal) cerrar(false);
+  });
+  modal.addEventListener("keydown", (evento) => {
+    if (evento.key === "Escape") {
+      // Que no lo procesen también la sidebar o el chat (escuchan Escape en document).
+      evento.stopPropagation();
+      cerrar(false);
+    } else if (evento.key === "Tab") {
+      // El foco queda atrapado entre los dos botones mientras el modal está abierto.
+      evento.preventDefault();
+      (document.activeElement === botonAceptar ? botonCancelar : botonAceptar).focus();
+    }
+  });
+
+  return ({
+    titulo: textoTitulo = "Confirmar acción",
+    mensaje: textoMensaje,
+    textoConfirmar = "Confirmar",
+    textoCancelar = "Cancelar",
+    variante = "primario",
+  }) => {
+    cerrar(false); // Si había otra confirmación abierta, cuenta como cancelada.
+    const tipo = clasesBoton[variante] ? variante : "primario";
+    titulo.textContent = textoTitulo;
+    mensaje.textContent = textoMensaje;
+    botonAceptar.textContent = textoConfirmar;
+    botonCancelar.textContent = textoCancelar;
+    botonAceptar.className = `btn ${clasesBoton[tipo]}`;
+    modal.querySelectorAll("[data-variante]").forEach((icono) => {
+      icono.hidden = icono.dataset.variante !== tipo;
+    });
+
+    focoPrevio = document.activeElement;
+    modal.hidden = false;
+    // En acciones destructivas el foco arranca en "Cancelar", para que un Enter no las ejecute.
+    (tipo === "peligro" ? botonCancelar : botonAceptar).focus();
+    return new Promise((resolver) => {
+      resolverPendiente = resolver;
+    });
+  };
+})();
 
 const botonSalir = document.getElementById("btnLogout");
 if (botonSalir) {

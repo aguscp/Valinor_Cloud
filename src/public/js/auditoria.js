@@ -4,11 +4,11 @@ const errorAuditoria = document.getElementById("errorAuditoria");
 const formFiltros = document.getElementById("formFiltros");
 
 const claseDeAccion = (accion) => {
-  if (["ACCESO_DENEGADO", "LOGIN_FALLIDO", "SESION_REVOCADA"].includes(accion)) {
-    return "estado-cancelado";
+  if (["ACCESO_DENEGADO", "LOGIN_FALLIDO", "SESION_REVOCADA", "CHAT_SIN_OPERADOR"].includes(accion)) {
+    return "etiqueta-peligro";
   }
-  if (["LOGIN", "LOGOUT"].includes(accion)) return "estado-reservado";
-  return "estado-atendido";
+  if (["LOGIN", "LOGOUT"].includes(accion)) return "etiqueta-info";
+  return "etiqueta-exito";
 };
 
 const cargarAuditoria = async () => {

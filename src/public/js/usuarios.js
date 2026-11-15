@@ -30,9 +30,9 @@ const sincronizarProfesional = (formulario) => {
 
 const estadoDe = (usuario) => {
   const vencido = usuario.expiraEl && new Date(usuario.expiraEl) <= new Date();
-  if (!usuario.activo) return crearEtiqueta("inactivo", "estado-cancelado");
-  if (vencido) return crearEtiqueta("vencido", "estado-cancelado");
-  return crearEtiqueta("activo", "estado-atendido");
+  if (!usuario.activo) return crearEtiqueta("inactivo", "etiqueta-peligro");
+  if (vencido) return crearEtiqueta("vencido", "etiqueta-peligro");
+  return crearEtiqueta("activo", "etiqueta-exito");
 };
 
 const abrirEdicion = (usuario) => {
@@ -57,7 +57,13 @@ const cambiarActivo = async (usuario) => {
 };
 
 const eliminarUsuario = async (usuario) => {
-  if (!confirm(`¿Eliminar el usuario ${usuario.usuario}?`)) return;
+  const confirmado = await confirmar({
+    titulo: "Eliminar usuario",
+    mensaje: `¿Eliminar el usuario ${usuario.usuario}? Esta acción no se puede deshacer.`,
+    textoConfirmar: "Eliminar",
+    variante: "peligro",
+  });
+  if (!confirmado) return;
   try {
     await api(`/api/usuarios/${usuario._id}`, { method: "DELETE" });
     await cargarUsuarios();
