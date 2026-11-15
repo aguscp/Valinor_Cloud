@@ -2,13 +2,15 @@
   const ruta = rutaActual || "";
   const esActivo = (href) => (href === "/" ? ruta === "/" : ruta === href || ruta.startsWith(href + "/"));
   const modulos = [
-    { href: "/turnos", texto: "Turnos", icono: "calendario", permiso: "turnos:read" },
+    { href: "/turnos", texto: usuario.rol === "cliente" ? "Mis reservas" : "Reservas", icono: "calendario", permiso: "turnos:read" },
+    { href: "/clases", texto: "Clases", icono: "calendario", permiso: "clases:read" },
     { href: "/clientes", texto: "Clientes", icono: "clientes", permiso: "clientes:read" },
     { href: "/profesionales", texto: "Profesionales", icono: "profesionales", permiso: "profesionales:read" },
-  ].filter((modulo) => puede(modulo.permiso));
+  ].filter((modulo) => puede(modulo.permiso) && (usuario.rol !== "cliente" || ["/turnos", "/clases"].includes(modulo.href)));
   const administracion = [
     { href: "/usuarios", texto: "Usuarios", icono: "usuarios", permiso: "usuarios:read" },
     { href: "/auditoria", texto: "Auditoría", icono: "auditoria", permiso: "auditoria:read" },
+    { href: "/salas", texto: "Salas", icono: "profesionales", permiso: "salas:manage" },
   ].filter((modulo) => puede(modulo.permiso));
 
 //- Overlay del drawer (solo móvil/tablet).
@@ -29,8 +31,12 @@ aside#sidebar(
   //- En desktop la columna ocupa todo el alto y solo el menú queda fijo al hacer scroll.
   nav(class="flex flex-1 flex-col gap-1 overflow-y-auto p-3 lg:sticky lg:top-16 lg:max-h-[calc(100dvh-4rem)] lg:flex-none")
     +enlaceSidebar("/", "Inicio", "inicio", esActivo("/"))
+    if ["profesional", "admin"].includes(usuario.rol)
+      +enlaceSidebar("/mis-clases", usuario.rol === "admin" ? "Horarios" : "Mis horarios", "calendario", esActivo("/mis-clases"))
     each modulo in modulos
       +enlaceSidebar(modulo.href, modulo.texto, modulo.icono, esActivo(modulo.href))
+    if usuario.rol === "cliente"
+      +enlaceSidebar("/mi-perfil", "Mi perfil", "usuarios", esActivo("/mi-perfil"))
     if administracion.length
       p(class="mt-4 mb-1 px-3 text-xs font-semibold tracking-wider text-indigo-profundo/60 uppercase lg:colapsada:sr-only") Administración
       div(class="mx-3 my-2 hidden border-t border-lavanda-300 lg:colapsada:block" aria-hidden="true")

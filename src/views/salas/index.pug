@@ -1,0 +1,46 @@
+extends ../layout
+
+block content
+  +encabezado("Salas y clases", "Administrá la capacidad de cada sala y la duración general de las clases.")
+
+  +seccion("Duración de clase")
+    +alerta("errorDuracion")
+    p#mensajeDuracion(hidden role="status" class="mb-4 rounded-lg border border-turno-presente/30 bg-turno-presente/10 px-4 py-3 text-sm font-medium text-green-900")
+    form#formDuracion(class="flex flex-col gap-4 sm:flex-row sm:items-end")
+      +campo("duracionMinutos", "Duración (minutos)", { contenedor: "sm:w-56" })(type="number" name="duracionMinutos" min="15" max="240" step="1" required)
+      button.btn.btn-primario(type="submit")
+        +icono("guardar")(class="size-4")
+        | Guardar duración
+
+  +seccion("Agregar sala")
+    +alerta("errorAltaSala")
+    form#formAltaSala(class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2")
+      +campo("nombreSala", "Nombre de la sala")(type="text" name="nombre" maxlength="60" required)
+      +campo("capacidadSala", "Capacidad (personas)")(type="number" name="capacidad" min="1" step="1" required)
+      +botonera
+        button.btn.btn-primario(type="submit")
+          +icono("mas")(class="size-4")
+          | Agregar sala
+
+  +seccion("Salas registradas")
+    +alerta("errorSalas")
+    +tabla(["Sala", "Capacidad", "Estado", "Acciones"], "tablaSalas")
+    +vacio("sinSalas", "Todavía no hay salas cargadas.")
+
+  +modal("modalEditarSala", "Editar sala")
+    +alerta("errorEdicionSala")
+    form#formEditarSala(class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2")
+      input(type="hidden" name="_id")
+      +campo("editNombreSala", "Nombre")(type="text" name="nombre" maxlength="60" required)
+      +campo("editCapacidadSala", "Capacidad (personas)")(type="number" name="capacidad" min="1" step="1" required)
+      label(class="flex items-center gap-2 self-end py-2 text-sm font-medium text-gray-800")
+        input(type="checkbox" name="activa" class="size-4 rounded border-gray-300 accent-marca")
+        | Sala activa
+      +botonera
+        button.btn.btn-secundario.btn-cerrar-modal(type="button") Cancelar
+        button.btn.btn-primario(type="submit")
+          +icono("guardar")(class="size-4")
+          | Guardar cambios
+
+block scripts
+  script(src="/js/salas.js")

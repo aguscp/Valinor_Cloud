@@ -84,7 +84,7 @@ Permiten escribir el estado de la sidebar como clases (`lg:colapsada:w-18`, `max
 
 **`@layer components` — solo lo que comparten Pug y el JS**
 
-Los botones, etiquetas y filas que crea el JS del navegador (`crearBoton`, `crearEtiqueta`, `crearFilaTurno`) ya usaban nombres de clase (`btn-editar`, `btn-danger`, `estado-reservado`…). En lugar de repartir largas cadenas de utilidades por el JS, esas clases se redefinieron con `@apply` de utilidades de Tailwind. Es la única "capa de componentes"; todo lo demás son utilidades escritas directamente en Pug.
+Los botones, etiquetas y filas que crea el JS del navegador (`crearBoton`, `crearEtiqueta`, `crearFilaReservaClase`) usan nombres de clase (`btn-editar`, `btn-danger`, `estado-reservada`…). En lugar de repartir largas cadenas de utilidades por el JS, esas clases se redefinieron con `@apply` de utilidades de Tailwind. Es la única "capa de componentes"; todo lo demás son utilidades escritas directamente en Pug.
 
 | Clase | Aspecto |
 |---|---|
@@ -95,24 +95,24 @@ Los botones, etiquetas y filas que crea el JS del navegador (`crearBoton`, `crea
 | `.btn-atender` | Verde oliva con texto blanco |
 | `.btn-cancelar`, `.btn-danger` | Coral suave con texto rojo oscuro |
 | `.etiqueta` | Pill con punto de color |
-| `.estado-reservado` / `-atendido` / `-cancelado` | Estados de turno con fondo sólido del color de la paleta (ver 3.3) |
+| `.estado-reservada` / `-asistida` / `-cancelada` | Estados de reserva con fondo sólido del color de la paleta (ver 3.3) |
 | `.estado-presente` / `-pendiente` | Listos para cuando existan esos estados |
 | `.etiqueta-info` / `-exito` / `-peligro` / `-neutra` | Etiquetas genéricas (rol, estado de usuario, acciones de auditoría) |
-| `.fila-reservado` / `-atendido` / `-cancelado` | Franja izquierda de 4px con el color del estado en las filas de turnos |
+| `.fila-reservada` / `-asistida` / `-cancelada` | Franja izquierda de 4px con el color del estado en las filas de reservas |
 
-### 3.3 Estados de turnos y contraste
+### 3.3 Estados de reservas y contraste
 
-El modelo `Turno` tiene tres estados (`reservado`, `atendido`, `cancelado`). Se acordó **no tocar el backend** y mapearlos a la paleta:
+El modelo `ReservaClase` tiene tres estados (`reservada`, `asistida`, `cancelada`) que se mapean a la paleta:
 
 | Estado del modelo | Color | Significado en la paleta | Tratamiento |
 |---|---|---|---|
-| `reservado` | Azul cobalto | Confirmado | Etiqueta con fondo cobalto `#1D3557` y texto blanco; franja cobalto |
-| `atendido` | Gris claro | Finalizado | Etiqueta con fondo gris `#E5E5E5` y texto gris oscuro; fila con fondo gris (queda "archivada" visualmente) |
-| `cancelado` | Coral | Cancelado / no-show | Etiqueta con fondo coral `#E63946` y texto casi negro; fila con tinte coral para que el bache resalte |
+| `reservada` | Azul cobalto | Confirmado | Etiqueta con fondo cobalto `#1D3557` y texto blanco; franja cobalto |
+| `asistida` | Gris claro | Finalizado | Etiqueta con fondo gris `#E5E5E5` y texto gris oscuro; fila con fondo gris (queda "archivada" visualmente) |
+| `cancelada` | Coral | Cancelada | Etiqueta con fondo coral `#E63946` y texto casi negro; fila con tinte coral |
 
 Presente (oliva) y Pendiente (mostaza) quedan definidos como tokens y clases (`.estado-presente`, `.estado-pendiente`) para cuando se agreguen esos estados al modelo.
 
-Las etiquetas de estado de turno tienen **fondo sólido con el color de la paleta**, para que los estados se distingan a simple vista (en una primera versión tenían un fondo tenue y el color solo en el texto, y costaba diferenciarlos).
+Las etiquetas de estado de reserva tienen **fondo sólido con el color de la paleta**, para que los estados se distingan a simple vista.
 
 Regla de contraste: **nunca texto blanco sobre fondos pastel o claros**. El texto blanco solo va sobre colores oscuros: cobalto (contraste ≈ 12:1), oliva (≈ 5,3:1) y `marca`. Sobre gris, mostaza y coral el texto es oscuro: en el coral `#E63946` el texto casi negro da ≈ 5:1, mientras que el blanco daría ≈ 4,2:1, por debajo del mínimo AA para texto chico. El nombre del cliente se muestra siempre en `font-medium text-gray-900`.
 
@@ -165,7 +165,7 @@ src/views/
 
 ### 3.7 Sidebar
 
-- Ítems con ícono, filtrados por permiso como antes (`puede(...)`): Inicio, Turnos, Clientes, Profesionales y una sección "Administración" con Usuarios y Auditoría.
+- Ítems con ícono, filtrados por permiso como antes (`puede(...)`): Inicio, Reservas, Clientes, Profesionales y una sección "Administración" con Usuarios y Auditoría.
 - **Ítem activo**: se marca con `aria-current="page"` y se estiliza con la variante `aria-[current=page]:` de Tailwind. Para saber la ruta en Pug se agregó en `src/index.js` un middleware que expone `res.locals.rutaActual = req.path`.
 - **Desktop (≥ 1024px)**: columna de 256px que ocupa todo el alto; el menú interno es `sticky` y acompaña el scroll. La hamburguesa la contrae a un **riel de 72px** con solo íconos (las etiquetas pasan a `sr-only` y cada link tiene `title` como tooltip). El estado se guarda en `localStorage` (`turnoflex:sidebar`) y un script inline en el `<head>` lo aplica antes de pintar para evitar el parpadeo.
 - **Móvil y tablet (< 1024px)**: drawer que entra desde la izquierda sobre un overlay oscuro, con su propia cabecera (logo + botón cerrar). Se cierra con el overlay, con Escape, con el botón cerrar o al elegir un link. Mientras está cerrado es `invisible`, así no recibe foco con Tab.
@@ -276,7 +276,7 @@ Las clases `estado-*` quedan reservadas a los turnos.
 
 ## 5. Ids y clases preservados
 
-Para que el JS existente siga funcionando sin cambios de lógica, todas las vistas conservan: `formAlta`, `formEditar`, `formFiltros`, `formLogin`, `errorAlta`, `errorListado`, `errorEdicion`, `errorTurnos`, `errorAuditoria`, `errorLogin`, `modalEditar`, `.btn-cerrar-modal`, `tablaTurnos`, `tablaClientes`, `tablaProfesionales`, `tablaUsuarios`, `tablaAuditoria`, `sinRegistros`, `sinTurnos`, `btnLimpiarFiltros`, `cantidadReservados`, `cantidadAtendidos`, `cantidadCancelados`, `.select-rol`, `.select-profesional`, `name="activo"`, `btnLogout`, y los `data-rol`, `data-usuario-id` y `data-permisos` del `<body>`.
+Las vistas conservan los ids compartidos que usa el JS: `formAlta`, `formEditar`, `formFiltros`, `formLogin`, `errorAlta`, `errorListado`, `errorEdicion`, `errorReservas`, `errorAuditoria`, `errorLogin`, `modalEditar`, `.btn-cerrar-modal`, `tablaReservas`, `tablaClientes`, `tablaProfesionales`, `tablaUsuarios`, `tablaAuditoria`, `sinRegistros`, `sinReservas`, `btnLimpiarFiltros`, `cantidadReservados`, `cantidadAtendidos`, `cantidadCancelados`, `.select-rol`, `.select-profesional`, `name="activo"`, `btnLogout`, y los `data-rol`, `data-usuario-id` y `data-permisos` del `<body>`.
 
 ## 6. Verificación
 
@@ -287,7 +287,7 @@ Se probó contra la app corriendo en Docker (`docker compose up`) con los datos 
 3. **Sidebar**: en 1440px la hamburguesa la contrae a riel de íconos y el estado persiste al recargar; en 375px abre el drawer y se cierra al tocar el overlay. El ítem activo se marca en cada módulo.
 4. **Menú de usuario**: muestra iniciales, nombre, usuario y rol; "Cerrar sesión" desloguea y redirige a `/login`.
 5. **CRUD**: alta de un cliente desde el formulario y baja desde la tabla funcionan; los botones y etiquetas creados por el JS toman los estilos nuevos.
-6. **Permisos**: con `profesional1` la sidebar muestra solo Inicio, Turnos, Clientes y Profesionales, y `/usuarios` muestra la página de error con título "Acceso denegado · TurnoFlex".
+6. **Permisos**: con `profesional1` la sidebar muestra solo Inicio, Reservas, Clientes y Profesionales, y `/usuarios` muestra la página de error con título "Acceso denegado · TurnoFlex".
 7. **Footer** con el año en curso en todas las vistas, incluidas login y error.
 
 Para repetir la verificación a mano:

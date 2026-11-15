@@ -1,37 +1,40 @@
 extends ../layout
 
 block content
-  +encabezado("Gestión de Turnos", "Reservá turnos y seguí su estado durante el día.")
+  if usuario.rol === "cliente"
+    +encabezado("Mis reservas", "Consultá el historial de tus clases. Podés cancelar una reserva antes del inicio.")
+  else
+    +encabezado("Reservas de clases", "Consultá las reservas y marcá asistencias.")
 
   if puede("turnos:create")
-    +seccion("Reservar nuevo turno")
+    +seccion("Reservar clase para un cliente", "Elegí un cliente y una clase existente con lugares disponibles.")
       +alerta("errorAlta")
+      p#mensajeAlta(hidden role="status" class="mb-4 rounded-lg border border-turno-presente/30 bg-turno-presente/10 px-4 py-3 text-sm font-medium text-green-900")
       form#formAlta(class="grid grid-cols-1 gap-x-6 gap-y-4 lg:grid-cols-2")
         +campoSelect("cliente", "Cliente")(name="cliente" required)
           option(value="") Seleccioná un cliente
-        +campoSelect("profesional", "Profesional")(name="profesional" required)
-          option(value="") Seleccioná un profesional
-        +campo("fecha", "Fecha")(type="date" name="fecha" required)
-        +campo("hora", "Hora")(type="time" name="hora" required)
+        +campoSelect("clase", "Clase disponible")(name="clase" required)
+          option(value="") Seleccioná una clase
+        p#detalleClaseAlta(hidden role="status" class="text-sm text-gray-600 lg:col-span-2")
         +botonera
           button.btn.btn-primario(type="submit")
             +icono("calendario")(class="size-4")
-            | Reservar Turno
+            | Reservar lugar
 
-  +seccion("Listado de turnos")
+  +seccion("Reservas")
     form#formFiltros(class="mb-4 grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-end")
       +campoSelect("filtroEstado", "Estado", { contenedor: "sm:w-48" })(name="estado")
         option(value="") Todos
-        option(value="reservado") Reservado
-        option(value="atendido") Atendido
-        option(value="cancelado") Cancelado
+        option(value="reservada") Reservada
+        option(value="asistida") Asistió
+        option(value="cancelada") Cancelada
       +campo("filtroFecha", "Fecha", { contenedor: "sm:w-48" })(type="date" name="fecha")
       button.btn.btn-secundario#btnLimpiarFiltros(type="button") Limpiar
 
-    +alerta("errorTurnos")
-    +tabla(["Fecha", "Hora", "Cliente", "Profesional", "Estado", "Acciones"], "tablaTurnos")
-    +vacio("sinTurnos", "No hay turnos que coincidan.")
+    +alerta("errorReservas")
+    +tabla(["Fecha", "Hora", "Clase", "Cliente", "Instructor", "Sala", "Estado", "Acciones"], "tablaReservas")
+    +vacio("sinReservas", "No hay reservas que coincidan.")
 
 block scripts
-  script(src="/js/turnosTabla.js")
+  script(src="/js/reservasTabla.js")
   script(src="/js/turnos.js")

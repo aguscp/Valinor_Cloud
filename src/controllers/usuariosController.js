@@ -1,19 +1,22 @@
 const Usuario = require("../models/Usuario");
 const Profesional = require("../models/Profesional");
+const Cliente = require("../models/Cliente");
 const { tomarCampos, describirCambios } = require("../helpers/campos");
 const { registrarAuditoria } = require("../helpers/auditoria");
 const { firmarToken, enviarTokenEnCookie } = require("../helpers/token");
 const { desconectarUsuario } = require("../socket/emisor");
 const { liberarChatsDeAdmin } = require("../services/chatService");
 
-const CAMPOS = ["usuario", "password", "nombre", "rol", "profesional", "activo", "expiraEl"];
+const CAMPOS = ["usuario", "password", "nombre", "rol", "profesional", "cliente", "activo", "expiraEl"];
 
 const normalizar = (datos, rolFinal) => {
   if (datos.profesional === "") datos.profesional = null;
+  if (datos.cliente === "") datos.cliente = null;
   if (datos.expiraEl === "") datos.expiraEl = null;
   if (datos.password === "") delete datos.password;
   if (datos.activo !== undefined) datos.activo = datos.activo === true || datos.activo === "true";
   if (rolFinal !== "profesional") datos.profesional = null;
+  if (rolFinal !== "cliente") datos.cliente = null;
   return datos;
 };
 
@@ -22,9 +25,15 @@ const validarProfesional = async (idProfesional) => {
   return Profesional.exists({ _id: idProfesional });
 };
 
+const validarCliente = async (idCliente) => {
+  if (!idCliente) return true;
+  return Cliente.exists({ _id: idCliente });
+};
+
 const obtenerUsuarios = async (req, res) => {
   const usuarios = await Usuario.find()
     .populate("profesional", "nombre apellido")
+    .populate("cliente", "nombre apellido dni")
     .sort({ createdAt: 1 });
   res.json(usuarios);
 };
@@ -35,6 +44,12 @@ const crearUsuario = async (req, res) => {
 
   if (!(await validarProfesional(datos.profesional))) {
     return res.status(400).json({ error: "El profesional seleccionado no existe" });
+  }
+  if (datos.rol === "cliente" && !datos.cliente) {
+    return res.status(400).json({ error: "Seleccioná un cliente para vincular" });
+  }
+  if (!(await validarCliente(datos.cliente))) {
+    return res.status(400).json({ error: "El cliente seleccionado no existe" });
   }
 
   const usuario = await Usuario.create(datos);
@@ -65,6 +80,12 @@ const actualizarUsuario = async (req, res) => {
   if (!(await validarProfesional(datos.profesional))) {
     return res.status(400).json({ error: "El profesional seleccionado no existe" });
   }
+  if ((datos.rol || usuario.rol) === "cliente" && !datos.cliente && !usuario.cliente) {
+    return res.status(400).json({ error: "Seleccioná un cliente para vincular" });
+  }
+  if (!(await validarCliente(datos.cliente))) {
+    return res.status(400).json({ error: "El cliente seleccionado no existe" });
+  }
 
   const eraAdmin = usuario.rol === "admin";
   usuario.set(datos);
@@ -87,7 +108,10 @@ const actualizarUsuario = async (req, res) => {
     entidadId: usuario._id,
     detalle: `${usuario.usuario} - campos: ${cambios}`,
   });
-  await usuario.populate("profesional", "nombre apellido");
+  await usuario.populate([
+    { path: "profesional", select: "nombre apellido" },
+    { path: "cliente", select: "nombre apellido dni" },
+  ]);
   res.json(usuario);
 };
 

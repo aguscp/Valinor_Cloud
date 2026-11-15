@@ -1,7 +1,7 @@
 {
   "name": "valinor_cloud",
   "version": "1.0.0",
-  "description": "TurnoFlex: sistema de gestión de turnos",
+  "description": "TurnoFlex: sistema de gestión de clases y reservas",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",

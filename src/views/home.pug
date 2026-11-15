@@ -6,20 +6,20 @@ block content
       span Rol:
       span.etiqueta.etiqueta-info= usuario.rol
       if usuario.rol === "profesional"
-        span Ves únicamente tus propios turnos.
+        span Ves únicamente tus propias clases.
 
   section(aria-labelledby="tituloResumen")
-    h2#tituloResumen(class="mb-3 text-lg font-semibold text-gray-900") Turnos de hoy
+    h2#tituloResumen(class="mb-3 text-lg font-semibold text-gray-900") Reservas de hoy
     div(class="grid grid-cols-1 gap-4 sm:grid-cols-3")
-      +tarjetaResumen("cantidadReservados", "Reservados", "reloj", "confirmado")
-      +tarjetaResumen("cantidadAtendidos", "Atendidos", "atendido", "finalizado")
-      +tarjetaResumen("cantidadCancelados", "Cancelados", "cancelado", "cancelado")
+      +tarjetaResumen("cantidadReservados", "Reservas activas", "reloj", "confirmado")
+      +tarjetaResumen("cantidadAtendidos", "Asistencias", "atendido", "finalizado")
+      +tarjetaResumen("cantidadCancelados", "Cancelaciones", "cancelado", "cancelado")
 
-  +seccion("Agenda del día")
-    +alerta("errorTurnos")
-    +tabla(["Fecha", "Hora", "Cliente", "Profesional", "Estado", "Acciones"], "tablaTurnos")
-    +vacio("sinTurnos", "No hay turnos para hoy.")
+  +seccion("Clases del día")
+    +alerta("errorReservas")
+    +tabla(["Fecha", "Hora", "Clase", "Cliente", "Instructor", "Sala", "Estado", "Acciones"], "tablaReservas")
+    +vacio("sinReservas", "No hay reservas para hoy.")
 
 block scripts
-  script(src="/js/turnosTabla.js")
+  script(src="/js/reservasTabla.js")
   script(src="/js/panel.js")

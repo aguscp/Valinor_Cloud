@@ -2,7 +2,7 @@ const chatService = require("../services/chatService");
 const { tomarCampos } = require("../helpers/campos");
 const { CHAT_MAX_POR_ADMIN } = require("../config/chat");
 
-// Admin: sus chats pendientes y activos. Recepción/profesional: su chat abierto o el último.
+// Admin: sus chats pendientes y activos. Cliente/recepción/profesional: su chat abierto o el último.
 const listarChats = async (req, res) => {
   const chats = await chatService.listarChats(req.usuario);
   res.json({ chats, maxPorAdmin: CHAT_MAX_POR_ADMIN });

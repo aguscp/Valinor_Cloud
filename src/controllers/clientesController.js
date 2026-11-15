@@ -1,5 +1,6 @@
 const Cliente = require("../models/Cliente");
-const Turno = require("../models/Turno");
+const ReservaClase = require("../models/ReservaClase");
+const Usuario = require("../models/Usuario");
 const { tomarCampos, describirCambios } = require("../helpers/campos");
 const { registrarAuditoria } = require("../helpers/auditoria");
 
@@ -46,9 +47,17 @@ const eliminarCliente = async (req, res) => {
   const cliente = await Cliente.findById(req.params.id);
   if (!cliente) return res.status(404).json({ error: "Cliente no encontrado" });
 
-  const tieneTurnosReservados = await Turno.exists({ cliente: cliente._id, estado: "reservado" });
-  if (tieneTurnosReservados) {
-    return res.status(409).json({ error: "No se puede eliminar: el cliente tiene turnos reservados" });
+  const tieneReservasActivas = await ReservaClase.exists({
+    cliente: cliente._id,
+    estado: "reservada",
+  });
+  if (tieneReservasActivas) {
+    return res.status(409).json({ error: "No se puede eliminar: el cliente tiene reservas activas" });
+  }
+
+  const tieneUsuario = await Usuario.exists({ cliente: cliente._id });
+  if (tieneUsuario) {
+    return res.status(409).json({ error: "No se puede eliminar: el cliente tiene un usuario vinculado" });
   }
 
   await cliente.deleteOne();

@@ -9,6 +9,8 @@ mixin camposUsuario(prefijo, esEdicion)
       option(value=rol selected=rol === "profesional")= rol
   +campoSelect(prefijo + "profesional", "Profesional vinculado")(class="select-profesional" name="profesional")
     option(value="") Ninguno
+  +campoSelect(prefijo + "cliente", "Cliente vinculado")(class="select-cliente" name="cliente")
+    option(value="") Ninguno
   +campo(prefijo + "expiraEl", "Vence el (opcional)")(type="datetime-local" name="expiraEl")
   if esEdicion
     label(class="flex items-center gap-2 self-end py-2 text-sm font-medium text-gray-800")
@@ -30,7 +32,7 @@ block content
 
   +seccion("Listado de usuarios")
     +alerta("errorListado")
-    +tabla(["Usuario", "Nombre", "Rol", "Profesional", "Estado", "Vence", "Creado", "Modificado", "Último acceso", "Acciones"], "tablaUsuarios")
+    +tabla(["Usuario", "Nombre", "Rol", "Profesional", "Cliente", "Estado", "Vence", "Creado", "Modificado", "Último acceso", "Acciones"], "tablaUsuarios")
 
   +modal("modalEditar", "Editar Usuario")
     +alerta("errorEdicion")

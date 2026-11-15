@@ -51,10 +51,10 @@ aside#drawerChat(
       div(class="flex flex-col items-center gap-3 pt-4 text-center")
         span(class="inline-flex size-14 items-center justify-center rounded-2xl bg-lavanda-100 text-marca")
           +icono("mensajes")(class="size-7")
-        p(class="text-sm text-gray-600") Escribí tu consulta y un administrador la va a atender. Mientras esperás que la acepte no vas a poder enviar más mensajes.
+        p(class="text-sm text-gray-600") Escribí tu consulta sobre tus clases o reservas y un administrador la va a atender. Mientras esperás que la acepte no vas a poder enviar más mensajes.
       form#formConsulta(class="flex flex-col gap-2" novalidate)
         label(for="consultaTexto" class="text-sm font-medium text-gray-800") Tu consulta
-        textarea#consultaTexto(name="mensaje" rows="5" maxlength="1000" required placeholder="Por ejemplo: ¿cómo reprogramo un turno?" class=claseTextarea)
+        textarea#consultaTexto(name="mensaje" rows="5" maxlength="1000" required placeholder="Por ejemplo: ¿cómo cancelo una reserva?" class=claseTextarea)
         div(class="flex items-center justify-between gap-2")
           span#consultaContador(class="text-xs text-gray-500") 0 / 1000
           button#btnEnviarConsulta(type="submit" class="btn btn-primario")

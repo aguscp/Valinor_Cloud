@@ -1,0 +1,40 @@
+extends ../layout
+
+block content
+  +encabezado(esAdministrador ? "Horarios de clases" : "Mis horarios", esAdministrador ? "Publicá horarios y asigná cada clase a un profesor." : "Publicá clases semanales. La fecha elegida es la primera clase y determina el día de repetición. Podés cambiar la sala o el horario cuando lo necesites.")
+
+  +seccion("Agregar horario semanal", "Elegí desde cuándo comienza y por cuántas semanas se repetirá. Los cambios conservan las clases que ya tienen reservas.")
+    +alerta("errorHorario")
+    p#mensajeHorario(hidden role="status" class="mb-4 rounded-lg border border-turno-presente/30 bg-turno-presente/10 px-4 py-3 text-sm font-medium text-green-900")
+    form#formHorario(class="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 xl:grid-cols-4")
+      if esAdministrador
+        +campoSelect("profesionalHorario", "Profesor")(name="profesional" required)
+          option(value="") Seleccioná un profesor
+      +campo("tipoClase", "Tipo de clase")(type="text" name="tipo" maxlength="80" placeholder="Pilates Reformer" required)
+      +campo("horaInicio", "Hora de inicio")(type="time" name="horaInicio" step="60" required)
+      +campo("comienzaDesde", "Comienza desde")(type="date" name="comienzaDesde" required)
+      +campoSelect("repetirSemanas", "Repetir por")(name="repetirSemanas" required)
+        option(value="1") 1 semana
+        option(value="2") 2 semanas
+        option(value="3") 3 semanas
+        option(value="4") 4 semanas
+        option(value="5") 5 semanas
+        option(value="6") 6 semanas
+        option(value="7") 7 semanas
+        option(value="8" selected) 8 semanas
+      +campoSelect("salaHorario", "Sala disponible")(name="sala" required disabled)
+        option(value="") Elegí fecha y hora
+      p#duracionHorario(class="text-sm text-gray-600 md:col-span-2 xl:col-span-4")
+      +botonera
+        button.btn.btn-secundario#cancelarEdicionHorario(type="button" hidden) Cancelar edición
+        button.btn.btn-primario(type="submit")
+          +icono("mas")(class="size-4")
+          span#textoGuardarHorario Publicar horario
+
+  +seccion("Horarios semanales publicados")
+    +alerta("errorListadoHorarios")
+    +tabla(esAdministrador ? ["Clase", "Profesor", "Horario", "Vigencia", "Sala", "Capacidad", "Estado", "Acciones"] : ["Clase", "Horario", "Vigencia", "Sala", "Capacidad", "Estado", "Acciones"], "tablaHorarios")
+    +vacio("sinHorarios", "Todavía no publicaste horarios.")
+
+block scripts
+  script(src="/js/horariosClases.js")

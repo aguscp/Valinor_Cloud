@@ -15,6 +15,9 @@ block cuerpo
         +campo("usuario", "Usuario", { sinMarca: true })(type="text" name="usuario" autocomplete="username" required autofocus)
         +campo("password", "Contraseña", { sinMarca: true })(type="password" name="password" autocomplete="current-password" required)
         button.btn.btn-primario(type="submit" class="mt-2 w-full py-2.5") Ingresar
+      p(class="mt-5 text-center text-sm text-gray-600")
+        | ¿Sos cliente?
+        a(href="/registro" class="ml-1 font-semibold text-marca underline-offset-4 hover:underline") Registrate acá
 
 block scripts
   script(src="/js/login.js")

@@ -1,10 +1,20 @@
+const mongoose = require("mongoose");
 const Profesional = require("../models/Profesional");
-const Turno = require("../models/Turno");
+const HorarioClase = require("../models/HorarioClase");
+const ClaseProgramada = require("../models/ClaseProgramada");
+const ReservaClase = require("../models/ReservaClase");
 const Usuario = require("../models/Usuario");
 const { tomarCampos, describirCambios } = require("../helpers/campos");
 const { registrarAuditoria } = require("../helpers/auditoria");
 
 const CAMPOS = ["nombre", "apellido", "especialidad", "matricula"];
+const fechaActualEnArgentina = () =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 
 const obtenerProfesionales = async (req, res) => {
   const profesionales = await Profesional.find().sort({ apellido: 1, nombre: 1 });
@@ -47,14 +57,25 @@ const eliminarProfesional = async (req, res) => {
   const profesional = await Profesional.findById(req.params.id);
   if (!profesional) return res.status(404).json({ error: "Profesional no encontrado" });
 
-  const tieneTurnosReservados = await Turno.exists({
+  const tieneHorariosActivos = await HorarioClase.exists({
     profesional: profesional._id,
-    estado: "reservado",
+    activo: true,
   });
-  if (tieneTurnosReservados) {
+  const clasesFuturas = await ClaseProgramada.find({
+    profesional: profesional._id,
+    fecha: mongoose.trusted({ $gte: fechaActualEnArgentina() }),
+  }).select("_id");
+  const tieneReservasActivas =
+    clasesFuturas.length > 0
+      ? await ReservaClase.exists({
+          clase: mongoose.trusted({ $in: clasesFuturas.map((clase) => clase._id) }),
+          estado: "reservada",
+        })
+      : false;
+  if (tieneHorariosActivos || tieneReservasActivas) {
     return res
       .status(409)
-      .json({ error: "No se puede eliminar: el profesional tiene turnos reservados" });
+      .json({ error: "No se puede eliminar: el profesional tiene horarios activos o reservas de clases" });
   }
 
   const tieneUsuario = await Usuario.exists({ profesional: profesional._id });

@@ -28,6 +28,13 @@ const sincronizarProfesional = (formulario) => {
   if (!esProfesional) formulario.profesional.value = "";
 };
 
+const sincronizarCliente = (formulario) => {
+  const esCliente = formulario.rol.value === "cliente";
+  formulario.cliente.disabled = !esCliente;
+  formulario.cliente.required = esCliente;
+  if (!esCliente) formulario.cliente.value = "";
+};
+
 const estadoDe = (usuario) => {
   const vencido = usuario.expiraEl && new Date(usuario.expiraEl) <= new Date();
   if (!usuario.activo) return crearEtiqueta("inactivo", "etiqueta-peligro");
@@ -40,9 +47,11 @@ const abrirEdicion = (usuario) => {
     ...usuario,
     password: "",
     profesional: usuario.profesional ? usuario.profesional._id : "",
+    cliente: usuario.cliente ? usuario.cliente._id : "",
     expiraEl: aFechaLocal(usuario.expiraEl),
   });
   sincronizarProfesional(formEditar);
+  sincronizarCliente(formEditar);
   mostrarError(errorEdicion, "");
   modalEditar.hidden = false;
 };
@@ -95,6 +104,7 @@ const crearFilaUsuario = (usuario) => {
       usuario.nombre,
       usuario.rol,
       usuario.profesional ? nombreCompleto(usuario.profesional) : "-",
+      usuario.cliente ? nombreCompleto(usuario.cliente) : "-",
       estadoDe(usuario),
       formatearFechaHora(usuario.expiraEl),
       formatearFechaHora(usuario.createdAt),
@@ -122,9 +132,20 @@ const cargarProfesionales = async () => {
   });
 };
 
+const cargarClientes = async () => {
+  const clientes = await api("/api/clientes");
+  document.querySelectorAll(".select-cliente").forEach((select) => {
+    llenarSelect(select, clientes, (c) => `${c.apellido}, ${c.nombre} (DNI ${c.dni})`);
+  });
+};
+
 [formAlta, formEditar].filter(Boolean).forEach((formulario) => {
-  formulario.rol.addEventListener("change", () => sincronizarProfesional(formulario));
+  formulario.rol.addEventListener("change", () => {
+    sincronizarProfesional(formulario);
+    sincronizarCliente(formulario);
+  });
   sincronizarProfesional(formulario);
+  sincronizarCliente(formulario);
 });
 
 if (formAlta) {
@@ -135,6 +156,7 @@ if (formAlta) {
       await api("/api/usuarios", { method: "POST", body: prepararDatos(formAlta) });
       formAlta.reset();
       sincronizarProfesional(formAlta);
+      sincronizarCliente(formAlta);
       await cargarUsuarios();
     } catch (error) {
       mostrarError(errorAlta, error.message);
@@ -155,6 +177,6 @@ formEditar.addEventListener("submit", async (evento) => {
 });
 
 configurarModal(modalEditar);
-cargarProfesionales()
+Promise.all([cargarProfesionales(), cargarClientes()])
   .then(cargarUsuarios)
   .catch((error) => mostrarError(errorListado, error.message));

@@ -117,7 +117,7 @@ Navegador / Postman                     Servidor
 ### 4.2 Request autenticada
 
 ```
-GET /api/turnos  (cookie "token" o Authorization: Bearer)
+GET /api/clases/reservas  (cookie "token" o Authorization: Bearer)
   -> requiereLogin
        passport "jwt": extrae token (Bearer o cookie), verifica firma HS256 y exp
          sin token / firma inválida / vencido      -> 401 (API) o redirect /login (vistas), se borra la cookie

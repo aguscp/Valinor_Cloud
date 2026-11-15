@@ -18,10 +18,6 @@
       "value": ""
     },
     {
-      "key": "turnoId",
-      "value": ""
-    },
-    {
       "key": "usuarioId",
       "value": ""
     },
@@ -954,468 +950,6 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "Turnos",
-      "item": [
-        {
-          "name": "Listar turnos",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Listar turnos reservados",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos?estado=reservado",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos"
-              ],
-              "query": [
-                {
-                  "key": "estado",
-                  "value": "reservado"
-                }
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Crear turno",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"cliente\": \"{{clienteId}}\",\n  \"profesional\": \"{{profesionalId}}\",\n  \"fecha\": \"2026-12-01\",\n  \"hora\": \"10:00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
-                  "if (pm.response.code === 201) pm.collectionVariables.set(\"turnoId\", pm.response.json()._id);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Turno superpuesto (409)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"cliente\": \"{{clienteId}}\",\n  \"profesional\": \"{{profesionalId}}\",\n  \"fecha\": \"2026-12-01\",\n  \"hora\": \"10:00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 409\", () => pm.response.to.have.status(409));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Fecha mal formada (400)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"cliente\": \"{{clienteId}}\",\n  \"profesional\": \"{{profesionalId}}\",\n  \"fecha\": \"01/12/2026\",\n  \"hora\": \"10:00\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Ver turno",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos/{{turnoId}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos",
-                "{{turnoId}}"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Eliminar turno reservado (400)",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos/{{turnoId}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos",
-                "{{turnoId}}"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Cancelar turno",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos/{{turnoId}}/estado",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos",
-                "{{turnoId}}",
-                "estado"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"estado\": \"cancelado\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Cambiar estado de turno final (400)",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos/{{turnoId}}/estado",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos",
-                "{{turnoId}}",
-                "estado"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"estado\": \"atendido\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 400\", () => pm.response.to.have.status(400));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Eliminar turno cancelado",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/turnos/{{turnoId}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "turnos",
-                "{{turnoId}}"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Eliminar cliente",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/clientes/{{clienteId}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "clientes",
-                "{{clienteId}}"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Eliminar profesional",
-          "request": {
-            "method": "DELETE",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/profesionales/{{profesionalId}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "profesionales",
-                "{{profesionalId}}"
-              ]
-            }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test(\"Status 204\", () => pm.response.to.have.status(204));"
                 ]
               }
             }
@@ -2512,7 +2046,7 @@
           ]
         },
         {
-          "name": "Ver solo mis turnos",
+          "name": "Ver reservas propias",
           "request": {
             "method": "GET",
             "header": [
@@ -2522,13 +2056,14 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/turnos",
+              "raw": "{{base_url}}/api/clases/reservas",
               "host": [
                 "{{base_url}}"
               ],
               "path": [
                 "api",
-                "turnos"
+                "clases",
+                "reservas"
               ]
             }
           },
@@ -2555,6 +2090,45 @@
           }
         ]
       }
+    },
+    {
+      "name": "Reservas de clases",
+      "item": [
+        {
+          "name": "Listar reservas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/clases/reservas",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "clases",
+                "reservas"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "auth": {

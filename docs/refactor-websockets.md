@@ -6,7 +6,7 @@ Este documento explica la incorporación del chat de consultas a TurnoFlex: qué
 
 ## 1. Motivación y requisitos
 
-Los usuarios con rol `recepcion` y `profesional` necesitaban hacerle consultas a un administrador sin salir de la aplicación. Se pidió un chat en tiempo real con **WebSockets (Socket.io)** que cumpliera estas reglas:
+Los usuarios con rol `cliente`, `recepcion` y `profesional` pueden hacerle consultas a un administrador sin salir de la aplicación. Se pidió un chat en tiempo real con **WebSockets (Socket.io)** que cumpliera estas reglas:
 
 | # | Requisito | Cómo se cumple |
 |---|---|---|
@@ -139,7 +139,7 @@ Cuando una transición no se puede aplicar, `errorDeTransicion()` arma la respue
 | Campo | Tipo | Notas |
 |---|---|---|
 | `solicitante` | ObjectId → Usuario | Quien inició la consulta |
-| `rolSolicitante` | `recepcion` \| `profesional` | Se guarda para mostrarlo aunque el usuario cambie de rol después |
+| `rolSolicitante` | `cliente` \| `recepcion` \| `profesional` | Se guarda para mostrarlo aunque el usuario cambie de rol después |
 | `admin` | ObjectId → Usuario | Admin asignado. Cambia si se reasigna mientras está pendiente |
 | `estado` | `pendiente` \| `activo` \| `finalizado` \| `rechazado` | Por defecto `pendiente` |
 | `motivoCierre` | `admin` \| `timeout` \| `rechazo` \| `null` | Por qué se cerró |
@@ -174,7 +174,7 @@ Concentra toda la lógica de negocio. Lo usan los controladores REST, el servido
 
 | Función | Qué hace |
 |---|---|
-| `listarChats(usuario)` | Admin: sus chats `pendiente` y `activo`, con mensajes y los datos de los dos participantes. Recepción/profesional: su chat abierto o, si no tiene, el último que se cerró **en la última hora** (para que vea cómo terminó sin arrastrar conversaciones viejas). |
+| `listarChats(usuario)` | Admin: sus chats `pendiente` y `activo`, con mensajes y los datos de los dos participantes. Cliente/recepción/profesional: su chat abierto o, si no tiene, el último que se cerró **en la última hora** (para que vea cómo terminó sin arrastrar conversaciones viejas). |
 | `obtenerChat(usuario, id)` | Chat completo; 404 si no sos participante. |
 | `iniciarChat(req, texto)` | Valida el rol (403 a un admin) y el texto (400). Dentro del mutex: verifica que no tenga otro abierto (409), llama a `elegirAdmin()` (si devuelve `null`, audita `CHAT_SIN_OPERADOR` y responde 503), crea el chat, programa el timeout, emite y audita. |
 | `elegirAdmin({ excluir })` | Toma los admins conectados, calcula la carga con un `aggregate` (`$match` admin ∈ conectados, estado ∈ abiertos; `$group` por admin), descarta los que llegaron al límite y elige el de menor carga (empate al azar). |
@@ -255,10 +255,10 @@ Se agregó `crearError(status, mensaje)`, que crea un `Error` con `status` y `ex
 
 ### 5.10 Permisos (`src/config/roles.js`)
 
-| Permiso | profesional | recepcion | admin |
-|---|:-:|:-:|:-:|
-| `chat:usar` | ✓ | ✓ (heredado) | ✓ (heredado) |
-| `chat:moderar` | – | – | ✓ |
+| Permiso | cliente | profesional | recepcion | admin |
+|---|:-:|:-:|:-:|:-:|
+| `chat:usar` | ✓ | ✓ | ✓ (heredado) | ✓ (heredado) |
+| `chat:moderar` | – | – | – | ✓ |
 
 `chat:usar` se agregó al rol base y se hereda por el spread de arrays. Que un admin **no pueda iniciar** se resuelve con **control por contexto** en el servicio, como ya se hacía con las reglas de turnos: no se rompe la jerarquía de roles quitándole un permiso al admin.
 
@@ -417,7 +417,7 @@ Las conversaciones **activas** de un admin que se desconecta no se tocan: puede 
 |---|---|
 | `package.json` / `package-lock.json` | Dependencia `socket.io` ^4.8 |
 | `src/index.js` | `http.createServer(app)`, `iniciarSocket`, `recuperarTimeouts()` y la ruta `/api/chats` |
-| `src/config/roles.js` | Permisos `chat:usar` (profesional, y por herencia los demás) y `chat:moderar` (admin) |
+| `src/config/roles.js` | Permisos `chat:usar` (cliente/profesional, y por herencia recepción/admin) y `chat:moderar` (admin) |
 | `src/models/Auditoria.js` | Acción `CHAT_SIN_OPERADOR` |
 | `src/middlewares/errores.js` | Responde con su mensaje los errores con `expuesto: true` (incluido el 503) |
 | `src/controllers/authController.js` | El logout cierra los sockets del usuario |
@@ -462,6 +462,8 @@ Variables nuevas (opcionales) en `.env`:
 ```dotenv
 CHAT_MAX_POR_ADMIN=3        # chats abiertos (pendientes + activos) por admin
 CHAT_TIMEOUT_MINUTOS=5      # acepta decimales: 0.5 = 30 segundos, útil para probar
+GEMINI_API_KEY=             # opcional; habilita consultas @gemini en un chat activo
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
 ## 10. Verificación

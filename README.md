@@ -5,11 +5,14 @@ turnos de un centro de atención. Permite administrar profesionales, clientes y 
 
 - Persistencia en **MongoDB** usando Mongoose.
 - **Autenticación stateless con Passport + JWT**: login con `passport-local` (contraseñas hasheadas con bcrypt) y protección de rutas con `passport-jwt`. El token viaja en una cookie `httpOnly` o en el header `Authorization: Bearer`.
-- **Roles jerárquicos y permisos CRUD**: `admin` > `recepcion` > `profesional`.
+- **Roles y permisos CRUD**: `admin` > `recepcion` > `profesional`, más el rol independiente `cliente`.
+- **Autogestión para clientes**: registro desde el login, edición del perfil (excepto DNI), reserva de clases grupales y consulta de sus turnos y reservas.
+- **Clases grupales semanales**: profesores publican sus horarios, eligen salas disponibles y clientes reservan lugares hasta cubrir la capacidad.
 - **Auditoría** de todas las acciones relevantes.
 - **Front con `fetch`**: las pantallas cargan y guardan datos de forma asincrónica, sin recargar la página.
 - **Interfaz con Tailwind CSS 4** (por CDN, sin paso de build): navbar y sidebar colapsable, menú de usuario, colores por estado de turno y diseño responsive para móviles, tablets, portátiles y escritorio.
-- **Chat de consultas en tiempo real con WebSockets (Socket.io)**: recepción y profesionales le consultan a un administrador desde un panel lateral. Cada consulta pasa por los estados pendiente, activo, finalizado o rechazado, y vence a los 5 minutos si nadie la acepta.
+- **Chat de consultas en tiempo real con WebSockets (Socket.io)**: clientes, recepción y profesionales consultan a un administrador desde un panel lateral. Cada consulta pasa por los estados pendiente, activo, finalizado o rechazado, y vence a los 5 minutos si nadie la acepta.
+- **Asistente Gemini opcional**: en una conversación activa, escribí `@gemini` seguido de una pregunta para recibir una respuesta de ayuda. Configurá `GEMINI_API_KEY` para habilitarlo.
 
 ---
 
@@ -55,6 +58,8 @@ La guía completa está en [`docs/Docker/docker-readme.md`](docs/Docker/docker-r
 | `JWT_MINUTOS` | Vida del token en minutos. En el navegador se renueva mientras se usa la app | `30` |
 | `CHAT_MAX_POR_ADMIN` | Máximo de chats abiertos (pendientes + activos) que puede tener cada admin | `3` |
 | `CHAT_TIMEOUT_MINUTOS` | Minutos que espera una consulta a ser aceptada antes de vencer. Acepta decimales (`0.5` = 30 s) para probar | `5` |
+| `GEMINI_API_KEY` | Clave de API para habilitar el asistente Gemini | Sin configurar (deshabilitado) |
+| `GEMINI_MODEL` | Modelo de Gemini a utilizar | `gemini-3.5-flash-lite` |
 
 ### Usuarios de prueba (creados por `npm run seed`)
 
@@ -74,11 +79,8 @@ La guía completa está en [`docs/Docker/docker-readme.md`](docs/Docker/docker-r
 Valinor_Cloud/
 ├── .env.example
 ├── docs/
-│   ├── TurnoFlex.postman_collection.json
-│   ├── refactor-passport-jwt.md         Detalle del paso de express-session a Passport + JWT
-│   ├── refactor-frontend.md             Detalle del rediseño del frontend con Tailwind 4
-│   ├── refactor-websockets.md           Detalle del chat en tiempo real con Socket.io
-│   └── Docker/docker-readme.md          Guía para levantar el proyecto con Docker
+│   ├── GUIA_DE_PRUEBAS.md               Paso a paso para probar la aplicación
+│   └── TurnoFlex.postman_collection.json
 └── src/
     ├── index.js                         Configura Express, cookies, Passport, rutas, errores y Socket.io; conecta a Mongo
     ├── seed.js                          Carga datos y usuarios de prueba
@@ -90,9 +92,11 @@ Valinor_Cloud/
     ├── models/                          Esquemas de Mongoose
     │   ├── Cliente.js  
     │   ├── Profesional.js  
-    │   ├── Turno.js
+    │   ├── ReservaClase.js
     │   ├── Usuario.js                   Usuario, rol, estado, vencimiento, fechas y hash de contraseña
     │   ├── Chat.js                      Consulta, estado, admin asignado, vencimiento y mensajes
+    │   ├── Sala.js / ConfiguracionClase.js
+    │   ├── HorarioClase.js / ClaseProgramada.js / ReservaClase.js
     │   └── Auditoria.js                 Registro de eventos
     ├── controllers/                     Lógica de cada recurso (async/await)
     ├── services/
@@ -123,7 +127,7 @@ Valinor_Cloud/
     │   │   ├── chatDrawer.pug           Panel lateral del chat (vista según el rol)
     │   │   └── navbar.pug  sidebar.pug  footer.pug
     │   ├── login.pug  error.pug         Páginas sin shell (extienden layouts/base)
-    │   └── home.pug  clientes/  profesionales/  turnos/  usuarios/  auditoria/
+    │   └── home.pug  clientes/  profesionales/  turnos/  clases/  salas/  usuarios/  auditoria/
     └── public/
         └── js/                          JS del navegador (fetch a la API, layout.js para sidebar y menú, chat.js para el chat)
 ```
@@ -156,17 +160,28 @@ Todos los modelos usan `timestamps`, así que guardan `createdAt` (fecha de crea
 | `clientes` | nombre, apellido, dni, telefono, email | dni único de 7 u 8 números, email válido |
 | `profesionales` | nombre, apellido, especialidad, matricula | matrícula única |
 | `turnos` | cliente (ref), profesional (ref), fecha, hora, estado, creadoPor (ref) | fecha `YYYY-MM-DD`, hora `HH:mm`, estado en `reservado / atendido / cancelado` |
-| `usuarios` | usuario, password (hash bcrypt), nombre, rol, profesional (ref), activo, expiraEl, ultimoAcceso, tokenVersion | usuario único, contraseña de 6 caracteres o más, rol válido, profesional obligatorio si el rol es profesional |
+| `usuarios` | usuario, password (hash bcrypt), nombre, rol, profesional (ref), cliente (ref), activo, expiraEl, ultimoAcceso, tokenVersion | usuario único, contraseña de 6 caracteres o más, rol válido, profesional obligatorio si el rol es profesional y cliente obligatorio si el rol es cliente |
 | `chats` | solicitante (ref), rolSolicitante, admin (ref), estado, motivoCierre, expiraEl, aceptadoEl, cerradoEl, mensajes [autor, texto, createdAt] | estado en `pendiente / activo / finalizado / rechazado`, mensajes de 1 a 1000 caracteres, un solo chat abierto por usuario (índice único parcial) |
+| `salas` | nombre, capacidad, activa | capacidad entera positiva |
+| `horarioclases` | profesional (ref), tipo, horaInicio, comienzaDesde, repetirSemanas, sala (ref), activo | la fecha de inicio es la primera clase y determina el día semanal; repite de 1 a 8 ocurrencias, sin superposición de sala o profesor |
+| `claseprogramadas` | horario, fecha, tipo, profesional, sala, horaInicio, horaFin, capacidad, reservas, activa | ocurrencias generadas para las próximas 8 semanas; cupo atómico |
+| `reservaclases` | clase (ref), cliente (ref), estado | historial de reservas; una sola reserva activa por cliente y clase |
+| `configuracionclases` | clave, duracionMinutos | una duración general configurable por admin (por defecto 60 minutos) |
 | `auditoria` | usuario (ref), usuarioNombre, accion, entidad, entidadId, detalle, ip, createdAt | acción dentro de la lista permitida |
 
-### Reglas de negocio de turnos
+### Reglas de negocio de reservas
 
-- Un profesional no puede tener dos turnos reservados en la misma fecha y hora (409).
-- Un cliente no puede tener dos turnos reservados en la misma fecha y hora (409).
-- El estado solo puede cambiar de `reservado` a `atendido` o `cancelado`. Ambos son estados finales.
-- Solo se pueden eliminar turnos `cancelado`.
-- No se puede eliminar un cliente o profesional que tenga turnos reservados (409), ni un profesional con un usuario vinculado.
+- El registro público crea un cliente y una cuenta vinculada con rol `cliente`; el cliente puede consultar su historial y reservar clases grupales futuras.
+- El cliente puede modificar nombre, apellido, teléfono y email desde su perfil; el DNI no se modifica.
+- Cada profesor define el tipo, la fecha de la primera clase, la hora, la repetición de 1 a 8 semanas y una sala libre. La fecha determina el día semanal; los profesores también pueden consultar la vista semanal de clases sin reservar.
+- Admin debe cargar al menos una sala antes de que los profesores puedan publicar horarios.
+- Se generan tantas clases semanales como indique el profesor (de 1 a 8), desde la fecha elegida. Las ocurrencias se muestran cuando entran en la ventana de las próximas 8 semanas. Las completas se muestran deshabilitadas; hay una reserva por cliente y clase, con control atómico del cupo. Un cliente no puede reservar clases superpuestas.
+- Recepción y admin pueden asignar una clase existente a un cliente desde Gestión de turnos; se validan cupo, duplicados y superposiciones igual que en una reserva del cliente.
+- Las reservas ya hechas conservan el horario y cupo que tenían si el profesor edita o desactiva su horario; el cambio rige para ocurrencias futuras sin reservas.
+- El cliente puede cancelar antes del inicio de la clase. La reserva queda en el historial y libera el cupo; puede volver a reservar esa clase si hay lugar y se conserva cada cancelación.
+- Admin y el profesor responsable pueden marcar asistencia. Solo se eliminan reservas canceladas.
+- No se puede eliminar un cliente con reservas activas ni un profesional con horarios de clase activos.
+- Los cambios de horarios, salas, duración y reservas se serializan en memoria; la implementación requiere un solo proceso Node.
 
 ---
 
@@ -174,17 +189,19 @@ Todos los modelos usan `timestamps`, así que guardan `createdAt` (fecha de crea
 
 Los permisos usan la nomenclatura **CRUD**: `recurso:create`, `recurso:read`, `recurso:update` y `recurso:delete`.
 
-| Recurso | profesional | recepcion | admin |
-|---|:-:|:-:|:-:|
-| clientes | R | C R U D | C R U D |
-| profesionales | R | C R U D | C R U D |
-| turnos | R\* U\* | C R U D | C R U D |
-| usuarios | – | – | C R U D |
-| auditoria | – | – | R |
-| chat:usar | ✓ | ✓ | ✓ |
-| chat:moderar | – | – | ✓ |
+| Recurso | cliente | profesional | recepcion | admin |
+|---|:-:|:-:|:-:|:-:|
+| profesionales | R | R | C R U D | C R U D |
+| turnos | R | R\* U\* | C R U D | C R U D |
+| clases | R, reservar | gestionar horarios | – | duración |
+| salas | – | – | – | gestionar |
+| clientes | – | R | C R U D | C R U D |
+| usuarios | – | – | – | C R U D |
+| auditoria | – | – | – | R |
+| chat:usar | ✓ | ✓ | ✓ | ✓ |
+| chat:moderar | – | – | – | ✓ |
 
-\* Con control por contexto: el profesional solo ve **sus** turnos y solo puede marcarlos como **atendidos**.
+\* Con control por contexto: el profesional solo ve **sus** turnos y solo puede marcarlos como **atendidos**. El cliente solo ve los turnos vinculados a su cuenta y modifica solo su propio perfil, excepto el DNI.
 
 Los permisos del chat no siguen la nomenclatura CRUD: `chat:usar` permite consultar y escribir, y `chat:moderar` permite aceptar, rechazar y finalizar. Aunque el admin hereda `chat:usar`, **no puede iniciar** una consulta (control por contexto: 403).
 
@@ -200,8 +217,8 @@ router.delete("/:id", requierePermiso("clientes:delete"), eliminarCliente);
 |---|---|
 | **Mínimo privilegio** | Un usuario nuevo nace con el rol más bajo (`profesional`). Cada endpoint pide un permiso CRUD puntual y no un rol genérico. Los controladores solo aceptan los campos permitidos (`tomarCampos`), así nadie puede cambiar, por ejemplo, el `estado` de un turno al crearlo. La contraseña nunca viaja en las respuestas (`select: false` y `toJSON`). El token no lleva el rol ni los permisos: se leen de la base en cada request. |
 | **Contraseñas hasheadas** | Se guardan con bcrypt (`bcryptjs`, 10 rondas) en un hook `pre("save")` del modelo y se comparan con `bcrypt.compare`. |
-| **Roles jerárquicos** | En `roles.js`, cada rol hereda los permisos del anterior (`recepcion = [...profesional, ...]` y `admin = [...recepcion, ...]`). |
-| **Control por contexto** | Un usuario con rol profesional solo lista y consulta los turnos que tiene asignados, y solo puede pasarlos a `atendido`. Un admin no puede desactivarse, cambiarse el rol, ponerse vencimiento ni eliminarse a sí mismo. |
+| **Roles y permisos** | `cliente` es un rol independiente y limitado a sus turnos; `recepcion` hereda de `profesional` y `admin` hereda de `recepcion`. |
+| **Control por contexto** | Un cliente solo lista sus propios turnos; un profesional solo lista los turnos que tiene asignados y solo puede pasarlos a `atendido`. Un admin no puede desactivarse, cambiarse el rol, ponerse vencimiento ni eliminarse a sí mismo. |
 | **Auditoría** | Se registran LOGIN, LOGIN_FALLIDO, LOGOUT, CREAR, MODIFICAR, ELIMINAR, CAMBIO_ESTADO, ACCESO_DENEGADO, SESION_REVOCADA y CHAT_SIN_OPERADOR, con usuario, entidad, detalle, IP y fecha. Los cambios de estado del chat que hace el servidor (timeout, reasignación) quedan a nombre de `sistema`. El admin los consulta en `/auditoria`. |
 | **Revocación automática** | (1) El token vence a los `JWT_MINUTOS`; en el navegador se renueva solo mientras el usuario usa la app, así que en la práctica vence por inactividad. (2) En cada request se vuelve a leer el usuario desde Mongo: si fue desactivado, eliminado o pasó su fecha `expiraEl`, el token se rechaza en ese momento y se audita como SESION_REVOCADA. (3) Cada usuario tiene un `tokenVersion` que se incrementa al hacer logout o al cambiar la contraseña: los tokens anteriores dejan de valer (el logout cierra la sesión en todos los dispositivos). (4) Un usuario vencido o inactivo no puede volver a iniciar sesión. (5) Los sockets del chat se autentican con el mismo JWT y se cierran al hacer logout o cuando un admin desactiva, cambia de rol, vence o elimina al usuario. |
 | **Token seguro** | JWT firmado con HS256 (solo se acepta ese algoritmo). La cookie es `httpOnly` (no la lee JavaScript) y `sameSite=strict` (mitiga CSRF); en producción también es `secure`. |
@@ -215,7 +232,7 @@ Los usuarios con rol `recepcion` o `profesional` pueden hacerle una consulta a u
 
 **Reglas**
 
-- Solo `recepcion` y `profesional` pueden **iniciar** una consulta. El `admin` atiende: acepta, rechaza o finaliza. No hay chats entre administradores.
+- `cliente`, `recepcion` y `profesional` pueden **iniciar** una consulta. El `admin` atiende: acepta, rechaza o finaliza. No hay chats entre administradores.
 - Cada usuario puede tener **una sola consulta abierta** a la vez (409).
 - La consulta se asigna a **un solo admin conectado**: el que tiene menos chats abiertos (empate al azar), siempre que esté debajo de `CHAT_MAX_POR_ADMIN`. Si no hay ninguno conectado o todos llegaron al límite, se responde **503** con "Todos los operadores se encuentran ocupados en este momento".
 - Mientras está **pendiente**, el usuario no puede enviar más mensajes. Si ningún admin la acepta en `CHAT_TIMEOUT_MINUTOS` (5), **el servidor** la cierra (`finalizado` por timeout) y le avisa al usuario.
@@ -253,7 +270,7 @@ Para probarlo, abrí dos navegadores (o una ventana normal y una privada): uno c
 
 ## API REST
 
-Todas las rutas (salvo el login) requieren un token válido, enviado en la cookie `token` (navegador) o en el header `Authorization: Bearer <token>`. Responden **401** sin token o con un token inválido, vencido o revocado, y **403** sin permiso.
+Todas las rutas (salvo el login y el registro público de clientes) requieren un token válido, enviado en la cookie `token` (navegador) o en el header `Authorization: Bearer <token>`. Responden **401** sin token o con un token inválido, vencido o revocado, y **403** sin permiso.
 
 ```bash
 TOKEN=$(curl -s -H "Content-Type: application/json" \
@@ -268,26 +285,37 @@ La colección de Postman (`docs/TurnoFlex.postman_collection.json`) guarda el to
 | Método | Ruta | Permiso | Descripción |
 |---|---|---|---|
 | POST | `/api/auth/login` | público | `{ usuario, password }`. Devuelve `{ token, usuario, nombre, rol }` y setea la cookie `token` |
+| POST | `/api/auth/registro-clientes` | público | Crea el cliente y su usuario vinculado; inicia sesión y devuelve el mismo formato que el login |
 | POST | `/api/auth/logout` | token | Invalida los tokens del usuario y borra la cookie |
 | GET | `/api/auth/yo` | token | Usuario actual y sus permisos |
+| GET/PUT | `/api/auth/yo/perfil` | cuenta cliente | Consultar/actualizar el propio perfil. Solo acepta nombre, apellido, teléfono y email; el DNI no se modifica |
+| GET | `/api/clases/disponibles` | clases:read | Clases futuras (8 semanas), con cupo; marca las reservas propias del cliente y permite consulta semanal al profesor |
+| POST | `/api/clases/:id/reservas` | clases:reservar | Reservar un lugar. El servidor comprueba cupo, fecha y superposiciones |
+| GET | `/api/clases/para-reservar` | turnos:create | Clases futuras para asignar a un cliente desde Gestión de turnos |
+| POST | `/api/clases/:id/reservas-para-cliente` | turnos:create | Reservar `{ cliente }` en una clase existente |
+| GET | `/api/clases/mis-reservas` | clases:reservar | Historial de reservas del cliente |
+| GET | `/api/clases/reservas?estado=&fecha=` | turnos:read | Listar reservas (por contexto: cliente, profesor o personal) |
+| PATCH | `/api/clases/reservas/:id/cancelar` | clases:cancelar | El cliente cancela su reserva antes del inicio; conserva el historial y libera el cupo |
+| PATCH | `/api/clases/reservas/:id/cancelar-personal` | turnos:update | Recepción/admin cancela una reserva |
+| PATCH | `/api/clases/reservas/:id/asistencia` | turnos:update | Admin o profesor responsable marca asistencia |
+| DELETE | `/api/clases/reservas/:id` | turnos:delete | Eliminar una reserva cancelada |
+| GET/POST/PUT | `/api/salas[/:id]` | salas:manage | Listar, crear y editar salas/capacidad/estado |
+| GET/PUT | `/api/clases/configuracion` | clases:configurar | Consultar o cambiar duración (15–240 minutos) |
+| GET/POST/PUT/DELETE | `/api/clases/horarios[/:id]` | clases:gestionar | El profesor gestiona sus horarios; el admin puede gestionar y asignar horarios a cualquier profesor |
+| GET | `/api/clases/horarios/salas-disponibles?comienzaDesde=&horaInicio=&repetirSemanas=&profesional=` | clases:gestionar | Salas libres para las fechas, hora y profesor elegidos |
 | GET | `/api/clientes` - `/api/clientes/:id` | clientes:read | Listar y ver detalle |
 | POST | `/api/clientes` | clientes:create | Crear |
 | PUT | `/api/clientes/:id` | clientes:update | Modificar |
 | DELETE | `/api/clientes/:id` | clientes:delete | Eliminar |
 | GET/POST/PUT/DELETE | `/api/profesionales[/:id]` | profesionales:\* | Igual que clientes |
-| GET | `/api/turnos?estado=&fecha=&cliente=&profesional=` | turnos:read | Listar con filtros (por contexto) |
-| GET | `/api/turnos/:id` | turnos:read | Ver detalle (por contexto) |
-| POST | `/api/turnos` | turnos:create | Reservar `{ cliente, profesional, fecha, hora }` |
-| PATCH | `/api/turnos/:id/estado` | turnos:update | `{ estado: "atendido" \| "cancelado" }` |
-| DELETE | `/api/turnos/:id` | turnos:delete | Eliminar (solo cancelados) |
 | GET | `/api/usuarios` | usuarios:read | Listar |
 | POST | `/api/usuarios` | usuarios:create | Crear |
 | PUT | `/api/usuarios/:id` | usuarios:update | Modificar rol, estado, vencimiento, contraseña, etc. |
 | DELETE | `/api/usuarios/:id` | usuarios:delete | Eliminar |
 | GET | `/api/auditoria?accion=&usuario=` | auditoria:read | Últimos 100 eventos |
-| GET | `/api/chats` | chat:usar | Admin: sus chats pendientes y activos. Recepción/profesional: su consulta abierta o la última cerrada en la última hora. Incluye `maxPorAdmin` |
+| GET | `/api/chats` | chat:usar | Admin: sus chats pendientes y activos. Cliente/recepción/profesional: su consulta abierta o la última cerrada en la última hora. Incluye `maxPorAdmin` |
 | GET | `/api/chats/:id` | chat:usar | Ver un chat con sus mensajes (solo participantes) |
-| POST | `/api/chats` | chat:usar | Iniciar consulta `{ mensaje }`. 403 si sos admin, 409 si ya tenés una abierta, 503 sin operadores |
+| POST | `/api/chats` | chat:usar | Cliente/recepción/profesional inician consulta `{ mensaje }`. 403 si sos admin, 409 si ya tenés una abierta, 503 sin operadores conectados |
 | POST | `/api/chats/:id/aceptar` | chat:moderar | `pendiente` → `activo` (solo el admin asignado) |
 | POST | `/api/chats/:id/rechazar` | chat:moderar | `pendiente` → `rechazado` |
 | POST | `/api/chats/:id/finalizar` | chat:moderar | `activo` → `finalizado` |
@@ -325,7 +353,3 @@ El grupo revisó, probó y ajustó todo el código generado. Las decisiones de d
 - Pug: https://pugjs.org/api/getting-started.html
 - MDN, Fetch API: https://developer.mozilla.org/es/docs/Web/API/Fetch_API
 - MongoDB Manual: https://www.mongodb.com/docs/manual/
-- Socket.io v4: https://socket.io/docs/v4/
-- Socket.io, salas (rooms): https://socket.io/docs/v4/rooms/
-- Socket.io, middlewares y autenticación: https://socket.io/docs/v4/middlewares/
-- MongoDB, índices parciales: https://www.mongodb.com/docs/manual/core/index-partial/

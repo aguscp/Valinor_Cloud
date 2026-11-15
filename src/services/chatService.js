@@ -223,8 +223,6 @@ const finalizarChat = async (req, chatId) => {
   return chat;
 };
 
-// Gemini participa como usuario virtual: su respuesta se guarda como un mensaje más
-// del chat (sin autor y con esIA en true) y se envía a los dos participantes.
 const responderConGemini = async (chat, pregunta) => {
   let texto;
   try {
@@ -271,11 +269,9 @@ const enviarMensaje = async (req, chatId, texto) => {
   const datos = { chatId: String(chat._id), mensaje: { ...mensaje, autor: String(yo) } };
   // También al emisor: así se sincronizan sus otras pestañas.
   emitirA(participantes(chat), "chat:mensaje", datos);
-
-  // Si el mensaje empieza con @gemini, se consulta a la IA y se publica su respuesta.
-  if (/^@gemini\b/i.test(contenido)) {
-    const pregunta = contenido.replace(/^@gemini/i, "").trim();
-    if (pregunta) await responderConGemini(chat, pregunta);
+  const preguntaGemini = contenido.replace(/^@gemini\b/i, "").trim();
+  if (/^@gemini\b/i.test(contenido) && preguntaGemini) {
+    await responderConGemini(chat, preguntaGemini);
   }
   return datos.mensaje;
 };

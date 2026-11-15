@@ -4,14 +4,14 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const MODELO = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 
 // Contexto: define cómo debe comportarse el asistente en cada respuesta.
-const CONTEXTO = `Sos el asistente virtual de TurnoFlex, un sistema de gestión de turnos
-de un centro de pilates, yoga y bienestar. Ayudás al personal (recepción, profesionales
-y administradores) con dudas sobre el uso del sistema y consultas generales.
-Reglas del sistema: un turno pasa de reservado a atendido o cancelado; solo se eliminan
-turnos cancelados; un profesional o un cliente no pueden tener dos turnos reservados
-en la misma fecha y hora.
+const CONTEXTO = `Sos el asistente virtual de TurnoFlex, una aplicación para gestionar clases
+grupales y reservas de un centro de pilates, yoga y bienestar. Ayudás a clientes y al personal
+con dudas generales sobre el uso del sistema.
+Los profesores publican clases semanales con fecha de inicio, repetición de hasta 8 semanas
+y sala disponible. Los clientes pueden reservar clases futuras con cupo y cancelar antes
+del inicio. Las reservas guardan historial; sus estados son reservada, asistida o cancelada.
 Respondé en español, de forma clara y breve (menos de 600 caracteres). Si no sabés algo,
-decilo. No inventes datos de clientes ni de turnos.`;
+decilo. No inventes datos de clientes, clases ni reservas.`;
 
 const TIEMPO_MAXIMO_MS = 10000;
 
@@ -29,12 +29,20 @@ const obtenerModelo = () => {
 // Envía la pregunta a Gemini y devuelve el texto de la respuesta.
 // Si Gemini no responde en el tiempo estipulado, se corta la espera con un error.
 const consultarIA = async (pregunta) => {
+  let temporizador;
   const respuesta = obtenerModelo().generateContent(pregunta);
-  const limite = new Promise((_, rechazar) =>
-    setTimeout(() => rechazar(new Error("Gemini tardó demasiado en responder")), TIEMPO_MAXIMO_MS)
-  );
-  const resultado = await Promise.race([respuesta, limite]);
-  return resultado.response.text().trim();
+  const limite = new Promise((_, rechazar) => {
+    temporizador = setTimeout(
+      () => rechazar(new Error("Gemini tardó demasiado en responder")),
+      TIEMPO_MAXIMO_MS
+    );
+  });
+  try {
+    const resultado = await Promise.race([respuesta, limite]);
+    return resultado.response.text().trim();
+  } finally {
+    clearTimeout(temporizador);
+  }
 };
 
 module.exports = { consultarIA };

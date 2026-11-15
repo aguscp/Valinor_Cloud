@@ -10,7 +10,7 @@ const MAX_TEXTO = 1000;
 const mensajeSchema = new mongoose.Schema(
   {
     autor: { type: mongoose.Schema.Types.ObjectId, ref: "Usuario", default: null },
-    esIA: { type: Boolean, default: false},
+    esIA: { type: Boolean, default: false },
     texto: {
       type: String,
       trim: true,
@@ -24,7 +24,7 @@ const mensajeSchema = new mongoose.Schema(
 const chatSchema = new mongoose.Schema(
   {
     solicitante: { type: mongoose.Schema.Types.ObjectId, ref: "Usuario", required: true },
-    rolSolicitante: { type: String, enum: ["recepcion", "profesional"], required: true },
+    rolSolicitante: { type: String, enum: ["cliente", "recepcion", "profesional"], required: true },
     // Admin asignado: cambia si el chat se reasigna mientras está pendiente.
     admin: { type: mongoose.Schema.Types.ObjectId, ref: "Usuario", required: true },
     estado: { type: String, enum: ESTADOS, default: "pendiente" },
