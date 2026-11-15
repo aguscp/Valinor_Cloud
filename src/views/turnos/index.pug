@@ -32,7 +32,10 @@ block content
       button.btn.btn-secundario#btnLimpiarFiltros(type="button") Limpiar
 
     +alerta("errorReservas")
-    +tabla(["Fecha", "Hora", "Clase", "Cliente", "Instructor", "Sala", "Estado", "Acciones"], "tablaReservas")
+    if usuario.rol === "cliente"
+      +tabla(["Fecha", "Hora", "Clase", "Instructor", "Sala", "Estado", "Acciones"], "tablaReservas")
+    else
+      +tabla(["Fecha", "Hora", "Clase", "Cliente", "Instructor", "Sala", "Estado", "Acciones"], "tablaReservas")
     +vacio("sinReservas", "No hay reservas que coincidan.")
 
 block scripts

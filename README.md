@@ -30,6 +30,8 @@ npm run seed              # crea datos y usuarios de prueba (borra lo que haya)
 npm run dev               # inicia con nodemon (o npm start)
 ```
 
+`npm run seed` borra todos los datos de la base indicada en `MONGO_URI` antes de recrearlos. Usalo solo con una base local o de prueba.
+
 La aplicación queda disponible en **http://localhost:3000**.
 
 > Si venís de una versión anterior (con `express-session`), volvé a correr `npm run seed`: las contraseñas ahora se guardan hasheadas y las que estaban en texto plano ya no sirven para iniciar sesión.
@@ -68,8 +70,12 @@ La guía completa está en [`docs/Docker/docker-readme.md`](docs/Docker/docker-r
 | `admin` | `admin123` | admin | Todo el sistema |
 | `admin2` | `admin123` | admin | Segundo operador, para probar el reparto de chats |
 | `recepcion` | `recepcion123` | recepcion | Clientes, profesionales y turnos |
-| `profesional1` | `prof1234` | profesional | Solo los turnos de la instructora Ferreyra |
-| `profesional2` | `prof5678` | profesional | Solo los turnos del instructor Acosta |
+| `profesional1` | `prof1234` | profesional | Clases de Camila Ferreyra |
+| `profesional2` | `prof5678` | profesional | Clases de Martín Acosta |
+| `profesional3` | `prof9012` | profesional | Clases de Valeria Quiroga |
+| `cliente1` a `cliente20` | `cliente123` | cliente | Una cuenta vinculada a cada cliente de prueba |
+
+El seed crea 20 clientes, 3 salas (capacidades 15, 15 y 20) y horarios de prueba de Pilates Reformer, Yoga y Pilates Mat. Incluye clases los martes, miércoles, jueves y viernes, además de tres horarios iniciales. Cada horario genera una clase semanal durante dos semanas (14 clases en total). Una clase de Pilates Reformer queda completa y las otras 13 se crean con entre 5 y 10 reservas. El seed genera las ocurrencias y sus reservas para que aparezcan directamente en el calendario y en los historiales de los clientes.
 
 ---
 

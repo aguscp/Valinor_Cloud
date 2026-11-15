@@ -102,18 +102,14 @@ const crearFilaReservaClase = (reserva, alTerminar, alFallar) => {
     asistida: "Asistió",
     cancelada: "Cancelada",
   };
-  const fila = crearFila(
-    [
-      clase.fecha || "—",
-      clase.horaInicio || "—",
-      clase.tipo || "(clase eliminada)",
-      nombreCompleto(reserva.cliente),
-      nombreCompleto(clase.profesional),
-      clase.sala ? clase.sala.nombre : "(sala eliminada)",
-      crearEtiqueta(etiquetas[reserva.estado] || reserva.estado, `estado-${reserva.estado}`),
-    ],
-    acciones
+  const celdas = [clase.fecha || "—", clase.horaInicio || "—", clase.tipo || "(clase eliminada)"];
+  if (rolActual !== "cliente") celdas.push(nombreCompleto(reserva.cliente));
+  celdas.push(
+    nombreCompleto(clase.profesional),
+    clase.sala ? clase.sala.nombre : "(sala eliminada)",
+    crearEtiqueta(etiquetas[reserva.estado] || reserva.estado, `estado-${reserva.estado}`)
   );
+  const fila = crearFila(celdas, acciones);
   fila.classList.add(`fila-${reserva.estado}`);
   return fila;
 };

@@ -11,7 +11,7 @@ TurnoFlex: aplicación web de gestión de clases grupales y reservas (Node.js 18
 ```bash
 npm install
 cp .env.example .env     # variables: PORT, MONGO_URI, JWT_SECRET, JWT_MINUTOS, CHAT_MAX_POR_ADMIN, CHAT_TIMEOUT_MINUTOS, GEMINI_API_KEY, GEMINI_MODEL
-npm run seed             # BORRA la base y crea datos y usuarios de prueba (admin/admin123, admin2/admin123, etc.)
+npm run seed             # BORRA la base; crea 20 clientes, 3 salas, clases y usuarios de prueba
 npm run dev              # nodemon src/index.js
 npm start                # node src/index.js
 ```
