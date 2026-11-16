@@ -1,16 +1,16 @@
-# TurnoFlex: Sistema de Gestión de Turnos
+# TurnoFlex: Sistema de Gestión de Clases y Reservas
 
-TurnoFlex es una aplicación web, hecha con **Node.js**, **Express** y **MongoDB** (con Mongoose), para gestionar los
-turnos de un centro de atención. Permite administrar profesionales, clientes y turnos, aplicando reglas de negocio. Es un **producto mínimo viable** con:
+TurnoFlex es una aplicación web, hecha con **Node.js**, **Express** y **MongoDB** (con Mongoose), para gestionar las
+clases grupales de un centro de pilates, yoga y bienestar. Permite administrar profesionales, clientes, salas, horarios de clases y reservas, aplicando reglas de negocio. Es un **producto mínimo viable** con:
 
 - Persistencia en **MongoDB** usando Mongoose.
 - **Autenticación stateless con Passport + JWT**: login con `passport-local` (contraseñas hasheadas con bcrypt) y protección de rutas con `passport-jwt`. El token viaja en una cookie `httpOnly` o en el header `Authorization: Bearer`.
 - **Roles y permisos CRUD**: `admin` > `recepcion` > `profesional`, más el rol independiente `cliente`.
-- **Autogestión para clientes**: registro desde el login, edición del perfil (excepto DNI), reserva de clases grupales y consulta de sus turnos y reservas.
+- **Autogestión para clientes**: registro desde el login, edición del perfil (excepto DNI), reserva de clases grupales y consulta de sus reservas.
 - **Clases grupales semanales**: profesores publican sus horarios, eligen salas disponibles y clientes reservan lugares hasta cubrir la capacidad.
 - **Auditoría** de todas las acciones relevantes.
 - **Front con `fetch`**: las pantallas cargan y guardan datos de forma asincrónica, sin recargar la página.
-- **Interfaz con Tailwind CSS 4** (por CDN, sin paso de build): navbar y sidebar colapsable, menú de usuario, colores por estado de turno y diseño responsive para móviles, tablets, portátiles y escritorio.
+- **Interfaz con Tailwind CSS 4** (por CDN, sin paso de build): navbar y sidebar colapsable, menú de usuario, colores por estado de reserva y diseño responsive para móviles, tablets, portátiles y escritorio.
 - **Chat de consultas en tiempo real con WebSockets (Socket.io)**: clientes, recepción y profesionales consultan a un administrador desde un panel lateral. Cada consulta pasa por los estados pendiente, activo, finalizado o rechazado, y vence a los 5 minutos si nadie la acepta.
 - **Asistente Gemini opcional**: en una conversación activa, escribí `@gemini` seguido de una pregunta para recibir una respuesta de ayuda. Configurá `GEMINI_API_KEY` para habilitarlo.
 
@@ -69,13 +69,13 @@ La guía completa está en [`docs/Docker/docker-readme.md`](docs/Docker/docker-r
 |---|---|---|---|
 | `admin` | `admin123` | admin | Todo el sistema |
 | `admin2` | `admin123` | admin | Segundo operador, para probar el reparto de chats |
-| `recepcion` | `recepcion123` | recepcion | Clientes, profesionales y turnos |
+| `recepcion` | `recepcion123` | recepcion | Clientes, profesionales y reservas |
 | `profesional1` | `prof1234` | profesional | Clases de Camila Ferreyra |
 | `profesional2` | `prof5678` | profesional | Clases de Martín Acosta |
 | `profesional3` | `prof9012` | profesional | Clases de Valeria Quiroga |
 | `cliente1` a `cliente20` | `cliente123` | cliente | Una cuenta vinculada a cada cliente de prueba |
 
-El seed crea 20 clientes, 3 salas (capacidades 15, 15 y 20) y exactamente 3 horarios diarios de Pilates Reformer, Yoga y Pilates Mat, todos los días de lunes a domingo. Cada horario genera una clase semanal durante 3 semanas (63 clases en total) y también crea las clases de hoy. Solo las ocurrencias de las primeras 2 semanas reciben reservas.
+El seed crea 20 clientes, 3 salas (capacidades 15, 15 y 20) y exactamente 3 horarios diarios de Pilates Reformer, Yoga y Pilates Mat, todos los días de lunes a domingo. Cada horario genera una clase semanal durante 8 semanas (168 clases en total). También crea las clases de hoy. Cada clase recibe entre 5 y 6 reservas; los clientes se distribuyen para que nadie quede inscripto en más de una clase por fecha.
 
 ---
 
@@ -85,7 +85,11 @@ El seed crea 20 clientes, 3 salas (capacidades 15, 15 y 20) y exactamente 3 hora
 Valinor_Cloud/
 ├── .env.example
 ├── docs/
-│   ├── GUIA_DE_PRUEBAS.md               Paso a paso para probar la aplicación
+│   ├── Docker/docker-readme.md          Guía para usar Docker
+│   ├── IA/                              Conversaciones con la IA usadas en cada cambio grande
+│   ├── refactor-passport-jwt.md         Detalle del cambio a Passport + JWT
+│   ├── refactor-frontend.md             Detalle del rediseño con Tailwind
+│   ├── refactor-websockets.md           Detalle del chat en tiempo real
 │   └── TurnoFlex.postman_collection.json
 └── src/
     ├── index.js                         Configura Express, cookies, Passport, rutas, errores y Socket.io; conecta a Mongo
@@ -98,7 +102,6 @@ Valinor_Cloud/
     ├── models/                          Esquemas de Mongoose
     │   ├── Cliente.js  
     │   ├── Profesional.js  
-    │   ├── ReservaClase.js
     │   ├── Usuario.js                   Usuario, rol, estado, vencimiento, fechas y hash de contraseña
     │   ├── Chat.js                      Consulta, estado, admin asignado, vencimiento y mensajes
     │   ├── Sala.js / ConfiguracionClase.js
@@ -107,7 +110,9 @@ Valinor_Cloud/
     ├── controllers/                     Lógica de cada recurso (async/await)
     ├── services/
     │   ├── chatService.js               Máquina de estados del chat, asignación de admins y reasignación
-    │   └── chatTimeouts.js              Temporizadores del vencimiento de consultas pendientes
+    │   ├── chatTimeouts.js              Temporizadores del vencimiento de consultas pendientes
+    │   ├── clasesService.js             Horarios, generación de clases programadas y control de superposiciones
+    │   └── geminiService.js             Consulta a Gemini (contexto, tiempo máximo y modelo configurable)
     ├── socket/
     │   ├── index.js                     Servidor Socket.io: autenticación JWT en el handshake y salas por usuario
     │   ├── emisor.js                    emitirA() y desconectarUsuario()
@@ -143,7 +148,7 @@ Valinor_Cloud/
 1. **Vistas y API separadas.** Las rutas de `vistasRoutes.js` solo renderizan la estructura de cada página con Pug. Los datos los pide el navegador con `fetch` a `/api/...`, que siempre responde JSON.
 2. **Sin recargas.** Al guardar, editar o eliminar, el JS envía la petición, espera la respuesta con `await` y vuelve a dibujar la tabla. Si hay un error de validación, se muestra al lado del formulario.
 3. **Autenticación sin estado.** El login (`POST /api/auth/login`) verifica la contraseña con la estrategia `local` de Passport, firma un JWT, lo guarda en la cookie `token` (`httpOnly`, `sameSite=strict`) y también lo devuelve en el JSON. El servidor no guarda sesiones: en cada request la estrategia `jwt` toma el token del header `Authorization: Bearer` o de la cookie y verifica su firma y vencimiento. Así funcionan tanto las páginas Pug (el navegador manda la cookie solo) como clientes externos como Postman (header Bearer).
-4. **Estilos con Tailwind.** Tailwind 4 se carga por CDN y compila las clases en el navegador, incluidas las de los elementos que crea el JS. La paleta (fondo neutro `#F8F9FA`, lavanda para navbar y sidebar, y los colores de estado de los turnos) se define una sola vez en `src/views/includes/tema.pug`; no hay hojas de estilo propias. En los turnos, `reservado` se muestra en azul cobalto, `atendido` en gris claro y `cancelado` en coral. El detalle está en [`docs/refactor-frontend.md`](docs/refactor-frontend.md).
+4. **Estilos con Tailwind.** Tailwind 4 se carga por CDN y compila las clases en el navegador, incluidas las de los elementos que crea el JS. La paleta (fondo neutro `#F8F9FA`, lavanda para navbar y sidebar, y los colores de estado de las reservas) se define una sola vez en `src/views/includes/tema.pug`; no hay hojas de estilo propias. En las reservas, `reservada` se muestra en azul cobalto, `asistida` en gris claro y `cancelada` en coral. El detalle está en [`docs/refactor-frontend.md`](docs/refactor-frontend.md).
 5. **Middlewares en cadena.** Cada ruta pasa por `requiereLogin` y luego por `requierePermiso("recurso:accion")` antes de llegar al controlador.
 6. **Errores centralizados.** Express 5 envía al `errorHandler` los errores de los controladores `async`. Ese middleware traduce los errores de Mongoose a respuestas claras:
 
@@ -165,9 +170,8 @@ Todos los modelos usan `timestamps`, así que guardan `createdAt` (fecha de crea
 |---|---|---|
 | `clientes` | nombre, apellido, dni, telefono, email | dni único de 7 u 8 números, email válido |
 | `profesionales` | nombre, apellido, especialidad, matricula | matrícula única |
-| `turnos` | cliente (ref), profesional (ref), fecha, hora, estado, creadoPor (ref) | fecha `YYYY-MM-DD`, hora `HH:mm`, estado en `reservado / atendido / cancelado` |
 | `usuarios` | usuario, password (hash bcrypt), nombre, rol, profesional (ref), cliente (ref), activo, expiraEl, ultimoAcceso, tokenVersion | usuario único, contraseña de 6 caracteres o más, rol válido, profesional obligatorio si el rol es profesional y cliente obligatorio si el rol es cliente |
-| `chats` | solicitante (ref), rolSolicitante, admin (ref), estado, motivoCierre, expiraEl, aceptadoEl, cerradoEl, mensajes [autor, texto, createdAt] | estado en `pendiente / activo / finalizado / rechazado`, mensajes de 1 a 1000 caracteres, un solo chat abierto por usuario (índice único parcial) |
+| `chats` | solicitante (ref), rolSolicitante, admin (ref), estado, motivoCierre, expiraEl, aceptadoEl, cerradoEl, mensajes [autor (opcional), esIA, texto, createdAt] | estado en `pendiente / activo / finalizado / rechazado`, mensajes de 1 a 1000 caracteres, un solo chat abierto por usuario (índice único parcial), autor opcional porque los mensajes de Gemini no tienen autor |
 | `salas` | nombre, capacidad, activa | capacidad entera positiva |
 | `horarioclases` | profesional (ref), tipo, horaInicio, comienzaDesde, repetirSemanas, sala (ref), activo | la fecha de inicio es la primera clase y determina el día semanal; repite de 1 a 8 ocurrencias, sin superposición de sala o profesor |
 | `claseprogramadas` | horario, fecha, tipo, profesional, sala, horaInicio, horaFin, capacidad, reservas, activa | ocurrencias generadas para las próximas 8 semanas; cupo atómico |
@@ -182,7 +186,7 @@ Todos los modelos usan `timestamps`, así que guardan `createdAt` (fecha de crea
 - Cada profesor define el tipo, la fecha de la primera clase, la hora, la repetición de 1 a 8 semanas y una sala libre. La fecha determina el día semanal; los profesores también pueden consultar la vista semanal de clases sin reservar.
 - Admin debe cargar al menos una sala antes de que los profesores puedan publicar horarios.
 - Se generan tantas clases semanales como indique el profesor (de 1 a 8), desde la fecha elegida. Las ocurrencias se muestran cuando entran en la ventana de las próximas 8 semanas. Las completas se muestran deshabilitadas; hay una reserva por cliente y clase, con control atómico del cupo. Un cliente no puede reservar clases superpuestas.
-- Recepción y admin pueden asignar una clase existente a un cliente desde Gestión de turnos; se validan cupo, duplicados y superposiciones igual que en una reserva del cliente.
+- Recepción y admin pueden asignar una clase existente a un cliente desde la pantalla Reservas; se validan cupo, duplicados y superposiciones igual que en una reserva del cliente.
 - Las reservas ya hechas conservan el horario y cupo que tenían si el profesor edita o desactiva su horario; el cambio rige para ocurrencias futuras sin reservas.
 - El cliente puede cancelar antes del inicio de la clase. La reserva queda en el historial y libera el cupo; puede volver a reservar esa clase si hay lugar y se conserva cada cancelación.
 - Admin y el profesor responsable pueden marcar asistencia. Solo se eliminan reservas canceladas.
@@ -198,7 +202,7 @@ Los permisos usan la nomenclatura **CRUD**: `recurso:create`, `recurso:read`, `r
 | Recurso | cliente | profesional | recepcion | admin |
 |---|:-:|:-:|:-:|:-:|
 | profesionales | R | R | C R U D | C R U D |
-| turnos | R | R\* U\* | C R U D | C R U D |
+| reservas (`turnos:*`) | R | R\* U\* | C R U D | C R U D |
 | clases | R, reservar | gestionar horarios | – | duración |
 | salas | – | – | – | gestionar |
 | clientes | – | R | C R U D | C R U D |
@@ -207,7 +211,7 @@ Los permisos usan la nomenclatura **CRUD**: `recurso:create`, `recurso:read`, `r
 | chat:usar | ✓ | ✓ | ✓ | ✓ |
 | chat:moderar | – | – | – | ✓ |
 
-\* Con control por contexto: el profesional solo ve **sus** turnos y solo puede marcarlos como **atendidos**. El cliente solo ve los turnos vinculados a su cuenta y modifica solo su propio perfil, excepto el DNI.
+\* Con control por contexto: el profesional solo ve las reservas de **sus** clases y solo puede marcar **asistencia** en ellas. El cliente solo ve sus propias reservas y modifica solo su propio perfil, excepto el DNI.
 
 Los permisos del chat no siguen la nomenclatura CRUD: `chat:usar` permite consultar y escribir, y `chat:moderar` permite aceptar, rechazar y finalizar. Aunque el admin hereda `chat:usar`, **no puede iniciar** una consulta (control por contexto: 403).
 
@@ -221,10 +225,10 @@ router.delete("/:id", requierePermiso("clientes:delete"), eliminarCliente);
 
 | Práctica | Cómo se implementa |
 |---|---|
-| **Mínimo privilegio** | Un usuario nuevo nace con el rol más bajo (`profesional`). Cada endpoint pide un permiso CRUD puntual y no un rol genérico. Los controladores solo aceptan los campos permitidos (`tomarCampos`), así nadie puede cambiar, por ejemplo, el `estado` de un turno al crearlo. La contraseña nunca viaja en las respuestas (`select: false` y `toJSON`). El token no lleva el rol ni los permisos: se leen de la base en cada request. |
+| **Mínimo privilegio** | Un usuario nuevo nace con el rol más bajo (`profesional`). Cada endpoint pide un permiso CRUD puntual y no un rol genérico. Los controladores solo aceptan los campos permitidos (`tomarCampos`), así nadie puede cambiar, por ejemplo, el `estado` de una reserva al crearla. La contraseña nunca viaja en las respuestas (`select: false` y `toJSON`). El token no lleva el rol ni los permisos: se leen de la base en cada request. |
 | **Contraseñas hasheadas** | Se guardan con bcrypt (`bcryptjs`, 10 rondas) en un hook `pre("save")` del modelo y se comparan con `bcrypt.compare`. |
-| **Roles y permisos** | `cliente` es un rol independiente y limitado a sus turnos; `recepcion` hereda de `profesional` y `admin` hereda de `recepcion`. |
-| **Control por contexto** | Un cliente solo lista sus propios turnos; un profesional solo lista los turnos que tiene asignados y solo puede pasarlos a `atendido`. Un admin no puede desactivarse, cambiarse el rol, ponerse vencimiento ni eliminarse a sí mismo. |
+| **Roles y permisos** | `cliente` es un rol independiente y limitado a sus reservas; `recepcion` hereda de `profesional` y `admin` hereda de `recepcion`. |
+| **Control por contexto** | Un cliente solo lista y cancela sus propias reservas; un profesional solo lista las reservas de sus clases y solo puede marcar asistencia en ellas. Un admin no puede desactivarse, cambiarse el rol, ponerse vencimiento ni eliminarse a sí mismo. |
 | **Auditoría** | Se registran LOGIN, LOGIN_FALLIDO, LOGOUT, CREAR, MODIFICAR, ELIMINAR, CAMBIO_ESTADO, ACCESO_DENEGADO, SESION_REVOCADA y CHAT_SIN_OPERADOR, con usuario, entidad, detalle, IP y fecha. Los cambios de estado del chat que hace el servidor (timeout, reasignación) quedan a nombre de `sistema`. El admin los consulta en `/auditoria`. |
 | **Revocación automática** | (1) El token vence a los `JWT_MINUTOS`; en el navegador se renueva solo mientras el usuario usa la app, así que en la práctica vence por inactividad. (2) En cada request se vuelve a leer el usuario desde Mongo: si fue desactivado, eliminado o pasó su fecha `expiraEl`, el token se rechaza en ese momento y se audita como SESION_REVOCADA. (3) Cada usuario tiene un `tokenVersion` que se incrementa al hacer logout o al cambiar la contraseña: los tokens anteriores dejan de valer (el logout cierra la sesión en todos los dispositivos). (4) Un usuario vencido o inactivo no puede volver a iniciar sesión. (5) Los sockets del chat se autentican con el mismo JWT y se cierran al hacer logout o cuando un admin desactiva, cambia de rol, vence o elimina al usuario. |
 | **Token seguro** | JWT firmado con HS256 (solo se acepta ese algoritmo). La cookie es `httpOnly` (no la lee JavaScript) y `sameSite=strict` (mitiga CSRF); en producción también es `secure`. |
@@ -234,7 +238,7 @@ router.delete("/:id", requierePermiso("clientes:delete"), eliminarCliente);
 
 ## Chat de consultas en tiempo real
 
-Los usuarios con rol `recepcion` o `profesional` pueden hacerle una consulta a un administrador desde el **ícono de mensajes de la navbar**, al lado del avatar. El ícono abre un **panel lateral** que se desliza desde la derecha y no bloquea la página. El badge del ícono muestra cuántos chats hay abiertos.
+Los usuarios con rol `cliente`, `recepcion` o `profesional` pueden hacerle una consulta a un administrador desde el **ícono de mensajes de la navbar**, al lado del avatar. El ícono abre un **panel lateral** que se desliza desde la derecha y no bloquea la página. El badge del ícono muestra cuántos chats hay abiertos.
 
 **Reglas**
 
@@ -274,6 +278,30 @@ Para probarlo, abrí dos navegadores (o una ventana normal y una privada): uno c
 
 ---
 
+## Asistente Gemini
+
+Dentro de un chat **activo**, cualquiera de los dos participantes puede pedirle ayuda a **Gemini**, la inteligencia artificial de Google. Se escribe `@gemini` seguido de la pregunta, por ejemplo `@gemini ¿Cómo reservo una clase?`.
+
+**Cómo funciona**
+
+1. El mensaje se guarda y se envía al otro participante como cualquier otro.
+2. Si empieza con `@gemini`, el servidor le envía la pregunta a Gemini junto con una instrucción de contexto (`src/services/geminiService.js`): es el asistente de TurnoFlex, responde en español, de forma breve y sin inventar datos.
+3. La respuesta se guarda como un mensaje con `esIA: true` y `autor: null`, y se envía en tiempo real a los dos participantes. En pantalla aparece con la etiqueta **Gemini**.
+4. Si falta la clave, si Gemini no responde en 10 segundos o si devuelve un error, el chat guarda el aviso "No pude responder en este momento. Intentá de nuevo más tarde." y sigue funcionando.
+
+**Configuración**
+
+- `GEMINI_API_KEY`: clave de la API. Se genera en [Google AI Studio](https://aistudio.google.com/api-key). Nunca se sube al repositorio: va en el `.env` o en las variables de entorno del despliegue.
+- `GEMINI_MODEL`: modelo a usar (opcional). El material de clase usa `gemini-2.5-flash`, pero ya no está disponible para claves nuevas, por eso el valor por defecto es `gemini-3.5-flash-lite`.
+
+**Decisiones y límites**
+
+- El campo `autor` de los mensajes pasó a ser opcional, y se agregó `esIA`. Se perdió la garantía de que todo mensaje tenga un usuario asociado, pero se evitó crear una cuenta "gemini" en la colección de usuarios, que habría que proteger para que nadie inicie sesión con ella.
+- El asistente solo responde dentro de un chat que un administrador ya aceptó, y contesta preguntas generales de uso: no consulta la base de datos.
+- Depende de la disponibilidad de Google y de la cuota gratuita de la clave.
+
+---
+
 ## API REST
 
 Todas las rutas (salvo el login y el registro público de clientes) requieren un token válido, enviado en la cookie `token` (navegador) o en el header `Authorization: Bearer <token>`. Responden **401** sin token o con un token inválido, vencido o revocado, y **403** sin permiso.
@@ -297,7 +325,7 @@ La colección de Postman (`docs/TurnoFlex.postman_collection.json`) guarda el to
 | GET/PUT | `/api/auth/yo/perfil` | cuenta cliente | Consultar/actualizar el propio perfil. Solo acepta nombre, apellido, teléfono y email; el DNI no se modifica |
 | GET | `/api/clases/disponibles` | clases:read | Clases futuras (8 semanas), con cupo; marca las reservas propias del cliente y permite consulta semanal al profesor |
 | POST | `/api/clases/:id/reservas` | clases:reservar | Reservar un lugar. El servidor comprueba cupo, fecha y superposiciones |
-| GET | `/api/clases/para-reservar` | turnos:create | Clases futuras para asignar a un cliente desde Gestión de turnos |
+| GET | `/api/clases/para-reservar` | turnos:create | Clases futuras para asignar a un cliente desde la pantalla Reservas |
 | POST | `/api/clases/:id/reservas-para-cliente` | turnos:create | Reservar `{ cliente }` en una clase existente |
 | GET | `/api/clases/mis-reservas` | clases:reservar | Historial de reservas del cliente |
 | GET | `/api/clases/reservas?estado=&fecha=` | turnos:read | Listar reservas (por contexto: cliente, profesor o personal) |
@@ -325,7 +353,18 @@ La colección de Postman (`docs/TurnoFlex.postman_collection.json`) guarda el to
 | POST | `/api/chats/:id/aceptar` | chat:moderar | `pendiente` → `activo` (solo el admin asignado) |
 | POST | `/api/chats/:id/rechazar` | chat:moderar | `pendiente` → `rechazado` |
 | POST | `/api/chats/:id/finalizar` | chat:moderar | `activo` → `finalizado` |
-| POST | `/api/chats/:id/mensajes` | chat:usar | Enviar mensaje `{ texto }` (solo con el chat `activo`, 409 si no) |
+| POST | `/api/chats/:id/mensajes` | chat:usar | Enviar mensaje `{ texto }` (solo con el chat `activo`, 409 si no). Si empieza con `@gemini`, el servidor agrega la respuesta del asistente |
+
+---
+
+## Despliegue
+
+La aplicación se despliega en **Vercel** (que toma el código de la rama `main` de GitHub y detecta que es una aplicación Express) con la base de datos en **MongoDB Atlas**.
+
+1. **MongoDB Atlas:** crear un cluster gratuito, un usuario de base de datos y habilitar el acceso de red desde cualquier dirección (`0.0.0.0/0`), porque Vercel no usa IP fijas. La base queda protegida por usuario y contraseña.
+2. **Vercel:** importar el repositorio y cargar las variables de entorno `MONGO_URI`, `JWT_SECRET` y `GEMINI_API_KEY` (opcionalmente `GEMINI_MODEL`). Estos valores no se suben al repositorio.
+3. **Datos:** correr `npm run seed` una vez con la `MONGO_URI` de Atlas. No volver a correrlo en una base con datos que se quieran conservar: borra todo.
+4. Las variables nuevas solo las toman los despliegues que se hagan después de cargarlas (usar **Redeploy** si hace falta).
 
 ---
 
@@ -338,9 +377,10 @@ En esta entrega usamos **Claude Code** como asistente de programación para:
 - planificar e implementar el cambio de `express-session` a Passport + JWT, verificarlo y documentarlo en `docs/refactor-passport-jwt.md`.
 - rediseñar las vistas Pug con Tailwind CSS 4 (paleta, navbar, sidebar, formularios y responsive), verificarlo y documentarlo en `docs/refactor-frontend.md`.
 - planificar e implementar el chat de consultas en tiempo real con Socket.io (máquina de estados, asignación de admins, timeout en el servidor y panel lateral), verificarlo y documentarlo en `docs/refactor-websockets.md`.
-- redactar este README.
+- integrar el asistente Gemini en el chat (servicio, mensajes marcados como IA, manejo de demoras y errores) y guiar el despliegue en Vercel con MongoDB Atlas.
+- redactar este README y el borrador de la documentación.
 
-El grupo revisó, probó y ajustó todo el código generado. Las decisiones de diseño (roles, permisos CRUD, alcance del MVP) fueron nuestras.
+El grupo revisó, probó y ajustó todo el código generado. Además, la aplicación usa IA en su funcionamiento: el asistente Gemini del chat. Las decisiones de diseño (roles, permisos CRUD, alcance del MVP) fueron nuestras.
 
 ---
 
@@ -359,3 +399,9 @@ El grupo revisó, probó y ajustó todo el código generado. Las decisiones de d
 - Pug: https://pugjs.org/api/getting-started.html
 - MDN, Fetch API: https://developer.mozilla.org/es/docs/Web/API/Fetch_API
 - MongoDB Manual: https://www.mongodb.com/docs/manual/
+- Socket.io v4: https://socket.io/docs/v4/
+- MongoDB Atlas: https://www.mongodb.com/docs/atlas/
+- Vercel: https://vercel.com/docs
+- Google AI Studio (claves de API de Gemini): https://aistudio.google.com/api-key
+- Gemini API: https://ai.google.dev/gemini-api/docs
+- SDK `@google/generative-ai`: https://www.npmjs.com/package/@google/generative-ai
